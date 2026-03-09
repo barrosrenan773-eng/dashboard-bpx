@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
@@ -7,6 +8,10 @@ import { KPICard } from '@/components/dashboard/KPICard'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 
 export default function ProdutosPage() {
+  return <Suspense><ProdutosContent /></Suspense>
+}
+
+function ProdutosContent() {
   const searchParams = useSearchParams()
   const [yampiProdutos, setYampiProdutos] = useState<any[]>([])
   const [clintProdutos, setClintProdutos] = useState<any[]>([])

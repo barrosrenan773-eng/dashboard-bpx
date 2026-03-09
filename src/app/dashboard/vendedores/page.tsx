@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
@@ -7,6 +8,10 @@ import { KPICard } from '@/components/dashboard/KPICard'
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
 
 export default function VendedoresPage() {
+  return <Suspense><VendedoresContent /></Suspense>
+}
+
+function VendedoresContent() {
   const searchParams = useSearchParams()
   const [data, setData] = useState<any>(null)
   const [metas, setMetas] = useState<any[]>([])

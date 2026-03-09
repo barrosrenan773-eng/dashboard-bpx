@@ -140,7 +140,7 @@ export default function LojaDetailPage() {
                 <Tooltip
                   contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 8 }}
                   labelStyle={{ color: '#a1a1aa', fontSize: 11 }}
-                  formatter={(value: any, name: string) => [
+                  formatter={(value: any, name: any) => [
                     name === 'Receita' ? formatCurrency(value) : formatNumber(value),
                     name,
                   ]}

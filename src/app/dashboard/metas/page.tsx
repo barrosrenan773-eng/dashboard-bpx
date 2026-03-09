@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
@@ -7,6 +8,10 @@ import { formatCurrency, formatPercent, formatNumber } from '@/lib/utils'
 import { Pencil, Plus, Check, X } from 'lucide-react'
 
 export default function MetasPage() {
+  return <Suspense><MetasContent /></Suspense>
+}
+
+function MetasContent() {
   const searchParams = useSearchParams()
   const [clint, setClint] = useState<any>(null)
   const [metas, setMetas] = useState<any[]>([])
