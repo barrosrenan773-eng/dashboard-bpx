@@ -42,7 +42,7 @@ export async function GET(request: Request) {
     }
 
     // status 4 = pago, status 6 = enviado (já pago e em transporte)
-    const paidOrders = allOrders.filter((o: any) => o.status_id === 4 || o.status_id === 6)
+    const paidOrders = allOrders.filter((o: any) => [3, 4, 6, 7].includes(o.status_id))
 
     const totalRevenue = paidOrders.reduce((sum: number, o: any) => sum + parseFloat(o.value_total || 0), 0)
     const totalOrders = paidOrders.length
