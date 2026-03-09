@@ -16,21 +16,29 @@ async function fetchLojaOrders(loja: typeof LOJAS[0], startDate: string, endDate
   let allOrders: any[] = []
   let page = 1
 
+  const lookbackDate = startDate
+    ? new Date(new Date(startDate).getTime() - 14 * 86400000).toISOString().slice(0, 10)
+    : ''
+
   while (page <= 100) {
     const res = await axios.get(baseUrl, { headers, params: { limit: 100, page, include: 'items' } })
     const orders: any[] = res.data.data || []
     if (orders.length === 0) break
 
-    let passedStart = false
     for (const o of orders) {
-      const dateStr = (o.created_at?.date || o.created_at || '').slice(0, 10)
-      if (startDate && dateStr < startDate) { passedStart = true; break }
-      if (!endDate || dateStr <= endDate) {
-        if ([3, 4, 6, 7, 10].includes(o.status_id)) allOrders.push(o)
-      }
+      if (![3, 4, 6, 7, 10].includes(o.status_id)) continue
+      const txns: any[] = o.transactions?.data || []
+      const paidTxn = txns.find((t: any) => t.status === 'paid' && t.captured_at)
+      if (!paidTxn) continue
+      const capturedDate = (paidTxn.captured_at?.date || paidTxn.captured_at || '').trim().slice(0, 10)
+      if (capturedDate >= startDate && capturedDate <= endDate) allOrders.push(o)
     }
 
-    if (passedStart) break
+    const lastDate = (orders[orders.length - 1]?.created_at?.date || orders[orders.length - 1]?.created_at || '').trim().slice(0, 10)
+    if (lookbackDate && lastDate < lookbackDate) break
+
+    const meta = res.data.meta?.pagination
+    if (!meta || page >= meta.total_pages) break
     page++
   }
 
