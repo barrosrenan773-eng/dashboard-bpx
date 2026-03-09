@@ -26,7 +26,7 @@ async function fetchLojaOrders(loja: typeof LOJAS[0], startDate: string, endDate
       const dateStr = (o.created_at?.date || o.created_at || '').slice(0, 10)
       if (startDate && dateStr < startDate) { passedStart = true; break }
       if (!endDate || dateStr <= endDate) {
-        if ([3, 4, 6, 7].includes(o.status_id)) allOrders.push(o)
+        if ([3, 4, 6, 7, 8, 10].includes(o.status_id)) allOrders.push(o)
       }
     }
 

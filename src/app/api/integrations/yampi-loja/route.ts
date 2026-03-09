@@ -63,7 +63,7 @@ export async function GET(request: Request) {
     }
 
     // status 3 = aprovado, 4 = pago, 6 = enviado, 7 = entregue
-    const paid = allOrders.filter((o: any) => [3, 4, 6, 7].includes(o.status_id))
+    const paid = allOrders.filter((o: any) => [3, 4, 6, 7, 8, 10].includes(o.status_id))
     const revenue = paid.reduce((s: number, o: any) => s + parseFloat(o.value_total || 0), 0)
     const orders = paid.length
     const avgTicket = orders > 0 ? revenue / orders : 0
