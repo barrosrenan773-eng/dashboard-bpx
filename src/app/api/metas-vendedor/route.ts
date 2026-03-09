@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+export const dynamic = 'force-dynamic'
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
 export async function GET(request: Request) {
+  const supabase = getSupabase()
   const { searchParams } = new URL(request.url)
   const mes = searchParams.get('mes') || ''
 
@@ -21,6 +26,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = getSupabase()
   const body = await request.json()
   const { vendedor, mes, meta, meta_leads } = body
 
@@ -39,6 +45,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const supabase = getSupabase()
   const { searchParams } = new URL(request.url)
   const vendedor = searchParams.get('vendedor') || ''
   const mes = searchParams.get('mes') || ''
