@@ -41,19 +41,17 @@ export async function GET(request: Request) {
     let page = 1
     const maxPages = 100
 
+    const params: any = { limit: 100, page }
+    if (startDate) params['date_start'] = startDate
+    if (endDate) params['date_end'] = endDate
+
     while (page <= maxPages) {
-      const res = await axios.get(baseUrl, { headers, params: { limit: 100, page } })
+      const res = await axios.get(baseUrl, { headers, params: { ...params, page } })
       const orders: any[] = res.data.data || []
       if (orders.length === 0) break
-
-      let passedStart = false
-      for (const o of orders) {
-        const dateStr = (o.created_at?.date || o.created_at || '').slice(0, 10)
-        if (startDate && dateStr < startDate) { passedStart = true; break }
-        if (!endDate || dateStr <= endDate) allOrders.push(o)
-      }
-
-      if (passedStart) break
+      allOrders = allOrders.concat(orders)
+      const meta = res.data.meta?.pagination
+      if (!meta || page >= meta.total_pages) break
       page++
     }
 
