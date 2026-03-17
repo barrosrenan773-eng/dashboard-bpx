@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     `
 
     const res = await axios.post(
-      `https://googleads.googleapis.com/v17/customers/${customerId}/googleAds:search`,
+      `https://googleads.googleapis.com/v19/customers/${customerId}/googleAds:search`,
       { query: query.trim() },
       {
         headers: {
