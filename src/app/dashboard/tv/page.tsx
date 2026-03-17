@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useEffect, useState, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { formatCurrency } from '@/lib/utils'
 import { TrendingUp, TrendingDown, Minus, Maximize2, Minimize2, RefreshCw } from 'lucide-react'
 
@@ -30,6 +30,8 @@ function txtColor(pct: number, ritmo: number) {
 
 function TVContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const today = new Date().toISOString().slice(0, 10)
   const firstOfMonth = today.slice(0, 7) + '-01'
   const start = searchParams.get('start') || firstOfMonth
@@ -163,6 +165,17 @@ function TVContent() {
           </button>
           <button onClick={toggleFullscreen} className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={() => {
+              if (document.fullscreenElement) document.exitFullscreen()
+              const params = new URLSearchParams(searchParams.toString())
+              params.delete('tv')
+              router.push(`${pathname.replace('/tv', '')}?${params.toString()}`)
+            }}
+            className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors text-xs font-medium"
+          >
+            Sair do modo TV
           </button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
@@ -30,6 +30,7 @@ const ALL_NAV = [
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [role, setRole] = useState<'admin' | 'visualizador' | null>(null)
 
   useEffect(() => {
@@ -84,7 +85,11 @@ export function Sidebar() {
       {/* TV + User */}
       <div className="px-3 py-4 border-t border-zinc-800 space-y-1">
         <button
-          onClick={() => window.open('/dashboard/tv', '_blank')}
+          onClick={() => {
+            const params = new URLSearchParams(searchParams.toString())
+            params.set('tv', '1')
+            router.push(`${pathname}?${params.toString()}`)
+          }}
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
         >
           <Tv2 className="w-4 h-4" />
