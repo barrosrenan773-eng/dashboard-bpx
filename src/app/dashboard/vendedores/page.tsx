@@ -16,6 +16,7 @@ function VendedoresContent() {
   const [data, setData] = useState<any>(null)
   const [metas, setMetas] = useState<any[]>([])
   const [metaAds, setMetaAds] = useState<any>(null)
+  const [googleAds, setGoogleAds] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [lastSync, setLastSync] = useState('carregando...')
 
@@ -31,10 +32,12 @@ function VendedoresContent() {
       fetch(`/api/integrations/clint?start=${start}&end=${end}`).then(r => r.json()),
       fetch(`/api/metas-vendedor?mes=${mes}`).then(r => r.json()),
       fetch(`/api/integrations/meta-vendedores?start=${start}&end=${end}`).then(r => r.json()).catch(() => ({})),
-    ]).then(([clintData, metasData, metaAdsData]) => {
+      fetch(`/api/integrations/google-ads?start=${start}&end=${end}`).then(r => r.json()).catch(() => ({})),
+    ]).then(([clintData, metasData, metaAdsData, googleAdsData]) => {
       setData(clintData)
       setMetas(Array.isArray(metasData) ? metasData : [])
       setMetaAds(metaAdsData)
+      setGoogleAds(googleAdsData)
       setLastSync('agora mesmo')
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -61,7 +64,9 @@ function VendedoresContent() {
       const metaLeadsProporcional = metaLeads * pctPeriodo
       const ritmoLeads = metaLeadsProporcional > 0 ? (v.leads / metaLeadsProporcional) * 100 : 0
       const spendMap = metaAds?.spendByVendedor || {}
-      const custoTrafego = spendMap[v.name] || spendMap[titleCase(v.name)] || 0
+      const googleMap = googleAds?.spendByVendedor || {}
+      const custoTrafego = (spendMap[v.name] || spendMap[titleCase(v.name)] || 0)
+        + (googleMap[v.name] || googleMap[titleCase(v.name)] || 0)
       const cplMeta = custoTrafego > 0 && v.leads > 0 ? custoTrafego / v.leads : 0
       const roasMeta = custoTrafego > 0 && v.revenue > 0 ? v.revenue / custoTrafego : 0
       return { ...v, meta, metaLeads, pctMeta, pctMetaLeads, metaProporcional, ritmo, metaLeadsProporcional, ritmoLeads, custoTrafego, cplMeta, roasMeta }
@@ -90,7 +95,10 @@ function VendedoresContent() {
           <KPICard title="Leads no Mês" value={loading ? '...' : formatNumber(totalLeads)} size="lg" />
           <KPICard title="Leads Hoje" value={loading ? '...' : formatNumber(totalLeadsHoje)} subtitle="criados hoje" size="lg" />
           <KPICard title="Conversão Geral" value={loading ? '...' : formatPercent(conversaoGeral)} highlight={conversaoGeral >= 15 ? 'success' : 'warning'} size="lg" />
-          <KPICard title="Gasto Mídia (Vendedores)" value={loading || !metaAds ? '...' : formatCurrency(Object.values(metaAds?.spendByVendedor || {}).reduce((s: number, v) => s + (v as number), 0))} highlight="warning" size="lg" />
+          <KPICard title="Gasto Mídia (Vendedores)" value={loading ? '...' : formatCurrency(
+            Object.values(metaAds?.spendByVendedor || {}).reduce((s: number, v) => s + (v as number), 0) +
+            Object.values(googleAds?.spendByVendedor || {}).reduce((s: number, v) => s + (v as number), 0)
+          )} highlight="warning" size="lg" />
         </div>
 
         {/* Cards por vendedor */}
