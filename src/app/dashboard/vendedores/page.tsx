@@ -247,7 +247,9 @@ function VendedoresContent() {
                     const atingiu = v.pctMeta >= 100
                     return (
                       <tr key={v.name} className="hover:bg-zinc-800/30 transition-colors">
-                        <td className="py-3 px-3 text-zinc-500 text-xs">{i + 1}</td>
+                        <td className="py-3 px-3 text-zinc-500 text-xs">
+                          {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                        </td>
                         <td className="py-3 px-3 text-white font-medium whitespace-nowrap">{titleCase(v.name)}</td>
                         <td className="py-3 px-3 text-zinc-300">{formatNumber(v.leads)}</td>
                         <td className={`py-3 px-3 font-medium ${v.leadsHoje > 0 ? 'text-blue-400' : 'text-zinc-600'}`}>{formatNumber(v.leadsHoje)}</td>
@@ -295,6 +297,45 @@ function VendedoresContent() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pódio */}
+            {vendedores.length >= 3 && (
+              <div className="mt-8 flex items-end justify-center gap-4">
+                {/* 2º lugar */}
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-2xl">🥈</span>
+                  <div className="text-center">
+                    <p className="text-white font-semibold text-sm">{titleCase(vendedores[1].name.split(' ')[0])}</p>
+                    <p className="text-zinc-400 text-xs">{formatCurrency(vendedores[1].revenue)}</p>
+                  </div>
+                  <div className="w-24 bg-zinc-600 rounded-t-lg flex items-center justify-center" style={{ height: '80px' }}>
+                    <span className="text-zinc-300 font-bold text-2xl">2</span>
+                  </div>
+                </div>
+                {/* 1º lugar */}
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-3xl">🥇</span>
+                  <div className="text-center">
+                    <p className="text-white font-bold text-sm">{titleCase(vendedores[0].name.split(' ')[0])}</p>
+                    <p className="text-emerald-400 text-xs font-semibold">{formatCurrency(vendedores[0].revenue)}</p>
+                  </div>
+                  <div className="w-24 bg-yellow-500/20 border border-yellow-500/30 rounded-t-lg flex items-center justify-center" style={{ height: '120px' }}>
+                    <span className="text-yellow-400 font-bold text-2xl">1</span>
+                  </div>
+                </div>
+                {/* 3º lugar */}
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-2xl">🥉</span>
+                  <div className="text-center">
+                    <p className="text-white font-semibold text-sm">{titleCase(vendedores[2].name.split(' ')[0])}</p>
+                    <p className="text-zinc-400 text-xs">{formatCurrency(vendedores[2].revenue)}</p>
+                  </div>
+                  <div className="w-24 bg-orange-900/30 rounded-t-lg flex items-center justify-center" style={{ height: '60px' }}>
+                    <span className="text-orange-400 font-bold text-2xl">3</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
