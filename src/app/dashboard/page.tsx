@@ -207,7 +207,7 @@ function DashboardContent() {
     .map((v: any) => {
       const meta = metasVendedores[v.name] || 0
       const pct = meta > 0 ? Math.round((v.revenue / meta) * 100) : 0
-      const spend = metaVend.spendByVendedor[v.name] || 0
+      const spend = metaVend.spendByVendedor[v.name] || metaVend.spendByVendedor[titleCase(v.name)] || 0
       const roas = spend > 0 ? v.revenue / spend : 0
       return { ...v, meta, pct, spend, roas }
     })

@@ -60,7 +60,8 @@ function VendedoresContent() {
       const ritmo = metaProporcional > 0 ? (v.revenue / metaProporcional) * 100 : 0
       const metaLeadsProporcional = metaLeads * pctPeriodo
       const ritmoLeads = metaLeadsProporcional > 0 ? (v.leads / metaLeadsProporcional) * 100 : 0
-      const custoTrafego = metaAds?.spendByVendedor?.[v.name] || 0
+      const spendMap = metaAds?.spendByVendedor || {}
+      const custoTrafego = spendMap[v.name] || spendMap[titleCase(v.name)] || 0
       const cplMeta = custoTrafego > 0 && v.leads > 0 ? custoTrafego / v.leads : 0
       const roasMeta = custoTrafego > 0 && v.revenue > 0 ? v.revenue / custoTrafego : 0
       return { ...v, meta, metaLeads, pctMeta, pctMetaLeads, metaProporcional, ritmo, metaLeadsProporcional, ritmoLeads, custoTrafego, cplMeta, roasMeta }
