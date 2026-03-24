@@ -14,14 +14,16 @@ import {
   Settings,
   LogOut,
   Target,
+  Calculator,
 } from 'lucide-react'
 
 const ALL_NAV = [
   { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard, adminOnly: true },
-  { href: '/dashboard/canais', label: 'Canais', icon: TrendingUp, adminOnly: true },
+  { href: '/dashboard/canais', label: 'Sites', icon: TrendingUp, adminOnly: true },
   { href: '/dashboard/vendedores', label: 'Vendedores', icon: Users, adminOnly: false },
   { href: '/dashboard/produtos', label: 'Produtos', icon: ShoppingCart, adminOnly: true },
   { href: '/dashboard/metas', label: 'Metas', icon: Target, adminOnly: false },
+  { href: '/dashboard/precificacao', label: 'Precificação', icon: Calculator, adminOnly: false, roles: ['admin', 'financeiro'] },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart2, adminOnly: true },
   { href: '/dashboard/configuracoes', label: 'Configurações', icon: Settings, adminOnly: true },
 ]
@@ -29,7 +31,7 @@ const ALL_NAV = [
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const [role, setRole] = useState<'admin' | 'visualizador' | null>(null)
+  const [role, setRole] = useState<'admin' | 'financeiro' | 'visualizador' | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -40,7 +42,11 @@ export function Sidebar() {
     })
   }, [])
 
-  const navItems = ALL_NAV.filter(item => role === 'admin' || !item.adminOnly)
+  const navItems = ALL_NAV.filter(item => {
+    if (role === 'admin') return true
+    if (item.roles) return item.roles.includes(role as string)
+    return !item.adminOnly
+  })
 
   async function handleLogout() {
     await supabase.auth.signOut()
