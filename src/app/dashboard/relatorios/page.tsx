@@ -35,7 +35,7 @@ export default function RelatoriosPage() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <span className="text-2xl font-bold text-white">Damatta<span className="text-emerald-400">.</span></span>
+              <span className="text-2xl font-bold text-white">BPX<span className="text-emerald-400">.</span></span>
               <span className="text-zinc-600">|</span>
               <span className="text-white font-semibold">Relatório Executivo</span>
             </div>
@@ -224,7 +224,7 @@ export default function RelatoriosPage() {
 
         {/* Rodapé */}
         <div className="text-center py-4 border-t border-zinc-800">
-          <p className="text-zinc-600 text-xs">Damatta. — Relatório Executivo {MES_REF} — Gerado em {dataGeracao} — Uso interno</p>
+          <p className="text-zinc-600 text-xs">BPX. — Relatório Executivo {MES_REF} — Gerado em {dataGeracao} — Uso interno</p>
         </div>
 
       </div>

@@ -12,9 +12,9 @@ export default function MetasPage() {
 }
 
 const LOJAS = [
-  { key: 'eros', label: 'Damatta Eros' },
+  { key: 'eros', label: 'BPX Eros' },
   { key: 'barba-negra', label: 'Barba Negra' },
-  { key: 'farma', label: 'Damatta Farma' },
+  { key: 'farma', label: 'BPX Farma' },
 ]
 
 function MetasContent() {

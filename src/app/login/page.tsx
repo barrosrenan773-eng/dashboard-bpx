@@ -33,7 +33,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-white font-bold text-3xl tracking-tight">
-            Damatta<span className="text-emerald-400">.</span>
+            BPX<span className="text-emerald-400">.</span>
           </h1>
           <p className="text-zinc-500 text-sm mt-1">Performance Dashboard</p>
         </div>
@@ -88,7 +88,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-zinc-600 text-xs mt-6">
-          Damatta © {new Date().getFullYear()}
+          BPX © {new Date().getFullYear()}
         </p>
       </div>
     </div>

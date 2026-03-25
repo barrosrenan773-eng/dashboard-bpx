@@ -10,9 +10,9 @@ export default function TVPage() {
 }
 
 const LOJAS = [
-  { key: 'eros', label: 'Damatta Eros' },
+  { key: 'eros', label: 'BPX Eros' },
   { key: 'barba-negra', label: 'Barba Negra' },
-  { key: 'farma', label: 'Damatta Farma' },
+  { key: 'farma', label: 'BPX Farma' },
 ]
 const EXCLUIR_VENDEDORES = ['giulia azevedo', 'rayane - retenção', 'thiago mendonça', 'sem vendedor', 'adriane']
 const titleCase = (s: string) => s.replace(/\b\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
@@ -150,7 +150,7 @@ function TVContent() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-white font-bold text-3xl tracking-tight">
-            Damatta<span className="text-emerald-400">.</span>
+            BPX<span className="text-emerald-400">.</span>
           </h1>
           <p className="text-zinc-500 text-sm mt-0.5">{start} → {end} · ritmo esperado {ritmo}%</p>
         </div>

@@ -10,9 +10,9 @@ import { ArrowLeft, TrendingUp, ShoppingCart, Users, MousePointerClick } from 'l
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 
 const LOJAS: Record<string, { label: string; cor: string }> = {
-  'eros': { label: 'Damatta Eros', cor: 'emerald' },
+  'eros': { label: 'BPX Eros', cor: 'emerald' },
   'barba-negra': { label: 'Barba Negra', cor: 'blue' },
-  'farma': { label: 'Damatta Farma', cor: 'purple' },
+  'farma': { label: 'BPX Farma', cor: 'purple' },
 }
 
 const MES_ATUAL_START = '2026-03-01'

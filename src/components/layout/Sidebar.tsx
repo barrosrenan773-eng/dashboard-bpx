@@ -58,7 +58,7 @@ export function Sidebar() {
       {/* Logo */}
       <div className="px-6 py-5 border-b border-zinc-800">
         <h1 className="text-white font-bold text-lg tracking-tight">
-          Damatta<span className="text-emerald-400">.</span>
+          BPX<span className="text-emerald-400">.</span>
         </h1>
         <p className="text-zinc-500 text-xs mt-0.5">Performance Dashboard</p>
       </div>

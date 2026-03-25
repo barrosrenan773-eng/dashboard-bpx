@@ -11,9 +11,9 @@ export default function DashboardPage() {
 }
 
 const LOJAS = [
-  { key: 'eros', label: 'Damatta Eros' },
+  { key: 'eros', label: 'BPX Eros' },
   { key: 'barba-negra', label: 'Barba Negra' },
-  { key: 'farma', label: 'Damatta Farma' },
+  { key: 'farma', label: 'BPX Farma' },
 ]
 
 const EXCLUIR_VENDEDORES = ['giulia azevedo', 'rayane - retenção', 'thiago mendonça', 'sem vendedor', 'adriane']

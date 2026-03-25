@@ -9,9 +9,9 @@ import { ArrowUpRight } from 'lucide-react'
 
 // Lojas com dashboard de detalhe
 const LOJAS_DETALHADAS: Record<string, string> = {
-  'Damatta Eros': '/dashboard/canais/eros',
+  'BPX Eros': '/dashboard/canais/eros',
   'Barba Negra': '/dashboard/canais/barba-negra',
-  'Damatta Farma': '/dashboard/canais/farma',
+  'BPX Farma': '/dashboard/canais/farma',
 }
 
 export default function CanaisPage() {
