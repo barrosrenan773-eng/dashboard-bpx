@@ -7,14 +7,10 @@ import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard,
-  TrendingUp,
   Users,
-  ShoppingCart,
   BarChart2,
-  Settings,
   LogOut,
   Target,
-  Calculator,
   DollarSign,
   FileText,
   Banknote,
@@ -22,16 +18,12 @@ import {
 
 const ALL_NAV = [
   { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard, adminOnly: true },
-  { href: '/dashboard/canais', label: 'Sites', icon: TrendingUp, adminOnly: true },
   { href: '/dashboard/vendedores', label: 'Vendedores', icon: Users, adminOnly: false },
-  { href: '/dashboard/produtos', label: 'Produtos', icon: ShoppingCart, adminOnly: true },
   { href: '/dashboard/meta/metas', label: 'Metas', icon: Target, adminOnly: false },
-  { href: '/dashboard/precificacao', label: 'Precificação', icon: Calculator, adminOnly: false, roles: ['admin', 'financeiro'] },
   { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign, adminOnly: false, roles: ['admin', 'financeiro'] },
   { href: '/dashboard/contratos', label: 'Contratos', icon: FileText, adminOnly: false, roles: ['admin', 'financeiro'] },
   { href: '/dashboard/caixa', label: 'Caixa', icon: Banknote, adminOnly: false, roles: ['admin', 'financeiro'] },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart2, adminOnly: true },
-  { href: '/dashboard/configuracoes', label: 'Configurações', icon: Settings, adminOnly: true },
 ]
 
 export function Sidebar() {
