@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, Pencil, Check, X } from 'lucide-react'
 
 type Consultor = {
   nome: string
@@ -120,6 +120,9 @@ function VendedoresInner() {
   const [loadingTrafego, setLoadingTrafego] = useState(true)
   const [spendVendedor, setSpendVendedor] = useState<Record<string, number>>({})
   const [spendGoogle, setSpendGoogle] = useState<Record<string, number>>({})
+  const [editandoMeta, setEditandoMeta] = useState<string | null>(null)
+  const [editMetaReceita, setEditMetaReceita] = useState('')
+  const [editMetaLeads, setEditMetaLeads] = useState('')
 
   const load = useCallback(async (s: string, e: string) => {
     const m = s.slice(0, 7)
@@ -160,6 +163,22 @@ function VendedoresInner() {
   }, [])
 
   useEffect(() => { load(start, end) }, [start, end, load])
+
+  async function salvarMeta(nome: string) {
+    const meta = parseFloat(editMetaReceita) || 0
+    const meta_leads = parseInt(editMetaLeads) || 0
+    await fetch('/api/metas-vendedor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vendedor: nome, mes, meta, meta_leads }),
+    })
+    setMetas(prev => {
+      const exists = prev.find(m => m.vendedor === nome)
+      if (exists) return prev.map(m => m.vendedor === nome ? { ...m, meta, meta_leads } : m)
+      return [...prev, { vendedor: nome, mes, meta, meta_leads, meta_conversao: 0, meta_ticket: 0 }]
+    })
+    setEditandoMeta(null)
+  }
 
   function normalizarNome(n: string) {
     return n.replace(/#\d*\s*/g, '').replace(/[#@!]/g, '').replace(/\s+/g, ' ').trim()
@@ -321,7 +340,26 @@ function VendedoresInner() {
                         <span className="text-lg">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}°`}</span>
                         <h3 className="text-white font-semibold text-sm truncate">{v.nome}</h3>
                       </div>
-                      <span className="text-xs text-zinc-500 shrink-0">{pct.toFixed(1)}% da receita</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-zinc-500">{pct.toFixed(1)}% da receita</span>
+                        {editandoMeta === v.nome ? (
+                          <div className="flex items-center gap-1">
+                            <input type="number" value={editMetaReceita} onChange={e => setEditMetaReceita(e.target.value)}
+                              className="w-20 bg-zinc-800 border border-zinc-600 text-white text-xs rounded px-2 py-1 focus:outline-none focus:border-emerald-500"
+                              placeholder="R$ meta" autoFocus />
+                            <input type="number" value={editMetaLeads} onChange={e => setEditMetaLeads(e.target.value)}
+                              className="w-16 bg-zinc-800 border border-zinc-600 text-white text-xs rounded px-2 py-1 focus:outline-none focus:border-purple-500"
+                              placeholder="leads" />
+                            <button onClick={() => salvarMeta(v.nome)} className="text-emerald-400 hover:text-emerald-300 p-1"><Check className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setEditandoMeta(null)} className="text-zinc-500 hover:text-zinc-300 p-1"><X className="w-3.5 h-3.5" /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setEditandoMeta(v.nome); setEditMetaReceita(String(getMeta(v.nome).meta || '')); setEditMetaLeads(String(getMeta(v.nome).meta_leads || '')) }}
+                            className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Barra de receita vs meta */}
