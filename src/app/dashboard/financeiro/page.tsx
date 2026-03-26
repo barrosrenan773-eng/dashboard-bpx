@@ -1,9 +1,41 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { Header } from '@/components/layout/Header'
 import { formatCurrency } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, Pencil, Trash2, X, Check, TrendingUp, TrendingDown, DollarSign, Percent, Upload, FileText, AlertCircle } from 'lucide-react'
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts'
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  Check,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Percent,
+  Upload,
+  FileText,
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  Users,
+} from 'lucide-react'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type OFXTransaction = {
   fitid: string
@@ -25,11 +57,6 @@ type Despesa = {
   created_at: string
 }
 
-type Contrato = {
-  id: number
-  taxa: number
-}
-
 type AddingState = {
   categoria: string
   descricao: string
@@ -42,11 +69,11 @@ type EditingState = {
   valor: string
 } | null
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function getCurrentMes(): string {
   const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  return `${y}-${m}`
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 function addMonth(mes: string, delta: number): string {
@@ -62,12 +89,77 @@ function formatMesLabel(mes: string): string {
   return `${months[m - 1]} ${y}`
 }
 
+function mesLabelShort(mes: string): string {
+  const [y, m] = mes.split('-').map(Number)
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', {
+    month: 'short',
+    year: '2-digit',
+  })
+}
+
 const CATEGORIAS = [
   { key: 'fixa', label: 'Despesas Fixas' },
   { key: 'variavel', label: 'Despesas Variáveis' },
   { key: 'pix', label: 'Tarifas Pix' },
   { key: 'pessoal', label: 'Despesas com Pessoal' },
 ] as const
+
+// ─── Custom Tooltip ───────────────────────────────────────────────────────────
+
+function CurrencyTooltip({ active, payload, label }: {
+  active?: boolean
+  payload?: { name: string; value: number; color: string }[]
+  label?: string
+}) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-3 shadow-xl text-xs space-y-1">
+      <p className="text-zinc-400 font-medium mb-2">{label}</p>
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: p.color }} />
+          <span className="text-zinc-300">{p.name}:</span>
+          <span className="text-white font-semibold">{formatCurrency(p.value)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── KPI Card ────────────────────────────────────────────────────────────────
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  color,
+  colorClass,
+  bgClass,
+}: {
+  label: string
+  value: string
+  sub?: string
+  icon: React.ElementType
+  color: string
+  colorClass: string
+  bgClass: string
+}) {
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 border-t-2 rounded-xl p-5" style={{ borderTopColor: color }}>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">{label}</p>
+        <div className={`p-1.5 rounded-lg ${bgClass}`}>
+          <Icon className={`w-3.5 h-3.5 ${colorClass}`} />
+        </div>
+      </div>
+      <p className="text-white font-bold text-2xl leading-tight">{value}</p>
+      {sub && <p className="text-zinc-500 text-xs mt-1 truncate">{sub}</p>}
+    </div>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function FinanceiroPage() {
   const [mes, setMes] = useState(getCurrentMes)
@@ -80,15 +172,7 @@ export default function FinanceiroPage() {
   const [saving, setSaving] = useState(false)
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
 
-  function toggleCat(key: string) {
-    setExpandedCats(prev => {
-      const n = new Set(prev)
-      n.has(key) ? n.delete(key) : n.add(key)
-      return n
-    })
-  }
-
-  // OFX reconciliation state
+  // OFX
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [ofxTxs, setOfxTxs] = useState<OFXTransaction[]>([])
   const [ofxCats, setOfxCats] = useState<Record<string, OFXCategoria>>({})
@@ -98,6 +182,18 @@ export default function FinanceiroPage() {
   const [ofxConciliando, setOfxConciliando] = useState(false)
   const [ofxDone, setOfxDone] = useState(0)
 
+  // Historical data for chart (last 6 months)
+  const [histDespesas, setHistDespesas] = useState<Record<string, number>>({})
+  const [histReceita, setHistReceita] = useState<Record<string, number>>({})
+
+  function toggleCat(key: string) {
+    setExpandedCats(prev => {
+      const n = new Set(prev)
+      n.has(key) ? n.delete(key) : n.add(key)
+      return n
+    })
+  }
+
   async function loadDespesas(m: string) {
     const r = await fetch(`/api/despesas?mes=${m}`)
     const data = await r.json()
@@ -106,8 +202,8 @@ export default function FinanceiroPage() {
 
   async function loadContratos() {
     const r = await fetch('/api/contratos')
-    const data: Contrato[] = await r.json()
-    const total = Array.isArray(data) ? data.reduce((s, c) => s + (c.taxa ?? 0), 0) : 0
+    const data = await r.json()
+    const total = Array.isArray(data) ? data.reduce((s: number, c: { taxa?: number }) => s + (c.taxa ?? 0), 0) : 0
     setReceita(total)
   }
 
@@ -121,6 +217,38 @@ export default function FinanceiroPage() {
     }
   }
 
+  async function loadHistorical() {
+    try {
+      const today = new Date()
+      const months: string[] = []
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
+        months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+      }
+      const [dRes, cRes] = await Promise.all([
+        fetch('/api/despesas'),
+        fetch('/api/contratos'),
+      ])
+      const allDespesas: Despesa[] = dRes.ok ? await dRes.json() : []
+      const allContratos: { taxa?: number; created_at: string }[] = cRes.ok ? await cRes.json() : []
+
+      const dMap: Record<string, number> = {}
+      const rMap: Record<string, number> = {}
+      months.forEach(m => {
+        dMap[m] = Array.isArray(allDespesas)
+          ? allDespesas.filter(d => d.mes === m || d.created_at?.slice(0, 7) === m).reduce((s, d) => s + Number(d.valor), 0)
+          : 0
+        rMap[m] = Array.isArray(allContratos)
+          ? allContratos.filter(c => c.created_at?.slice(0, 7) === m).reduce((s, c) => s + (c.taxa ?? 0), 0)
+          : 0
+      })
+      setHistDespesas(dMap)
+      setHistReceita(rMap)
+    } catch {
+      // silent
+    }
+  }
+
   async function load(m: string) {
     setLoading(true)
     await Promise.all([loadDespesas(m), loadContratos(), loadMetaAds(m)])
@@ -128,26 +256,37 @@ export default function FinanceiroPage() {
   }
 
   useEffect(() => { load(mes) }, [mes])
+  useEffect(() => { loadHistorical() }, [])
 
   const totalDespesas = despesas.reduce((s, d) => s + Number(d.valor), 0) + (metaAdsSpend ?? 0)
   const lucro = receita - totalDespesas
   const margem = receita > 0 ? (lucro / receita) * 100 : 0
   const isPositive = lucro >= 0
 
-  async function handleAdd(categoria: string) {
-    if (!adding || saving) return
-    if (!adding.descricao.trim()) return
-    setSaving(true)
-    const body = {
-      descricao: adding.descricao,
-      categoria,
-      valor: parseFloat(adding.valor) || 0,
-      mes,
+  // ── Chart data ──
+  const chartData = useMemo(() => {
+    const today = new Date()
+    const months: string[] = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
     }
+    return months.map(m => ({
+      mes: mesLabelShort(m + '-01'),
+      Receita: histReceita[m] ?? 0,
+      Despesas: histDespesas[m] ?? 0,
+      Lucro: (histReceita[m] ?? 0) - (histDespesas[m] ?? 0),
+    }))
+  }, [histReceita, histDespesas])
+
+  // ── CRUD ──
+  async function handleAdd(categoria: string) {
+    if (!adding || saving || !adding.descricao.trim()) return
+    setSaving(true)
     await fetch('/api/despesas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ descricao: adding.descricao, categoria, valor: parseFloat(adding.valor) || 0, mes }),
     })
     setSaving(false)
     setAdding(null)
@@ -160,11 +299,7 @@ export default function FinanceiroPage() {
     await fetch('/api/despesas', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: editing.id,
-        descricao: editing.descricao,
-        valor: parseFloat(editing.valor) || 0,
-      }),
+      body: JSON.stringify({ id: editing.id, descricao: editing.descricao, valor: parseFloat(editing.valor) || 0 }),
     })
     setSaving(false)
     setEditing(null)
@@ -177,6 +312,7 @@ export default function FinanceiroPage() {
     loadDespesas(mes)
   }
 
+  // ── OFX ──
   async function handleOFXUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -193,10 +329,8 @@ export default function FinanceiroPage() {
       const json = await res.json()
       if (json.error) { setOfxError(json.error); setOfxLoading(false); return }
       const txs: OFXTransaction[] = json.transactions ?? []
-      // Filtra pelo mês selecionado
       const filtered = txs.filter(t => t.mes === mes)
       setOfxTxs(filtered)
-      // Default: débitos → variavel, créditos → ignorar
       const cats: Record<string, OFXCategoria> = {}
       const descs: Record<string, string> = {}
       filtered.forEach(t => {
@@ -209,7 +343,6 @@ export default function FinanceiroPage() {
       setOfxError(String(err))
     }
     setOfxLoading(false)
-    // Limpa o input para permitir re-upload do mesmo arquivo
     e.target.value = ''
   }
 
@@ -222,12 +355,7 @@ export default function FinanceiroPage() {
       await fetch('/api/despesas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          descricao: ofxDescricoes[t.fitid] || t.descricao,
-          categoria: ofxCats[t.fitid],
-          valor: t.valor,
-          mes,
-        }),
+        body: JSON.stringify({ descricao: ofxDescricoes[t.fitid] || t.descricao, categoria: ofxCats[t.fitid], valor: t.valor, mes }),
       })
       count++
     }
@@ -242,74 +370,157 @@ export default function FinanceiroPage() {
   const ofxParaConciliar = ofxTxs.filter(t => ofxCats[t.fitid] !== 'ignorar').length
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <Header title="Financeiro" lastSync="" />
+    <div className="flex flex-col min-h-screen bg-zinc-950">
+      <Header title="Financeiro" lastSync="Atualizado agora" />
 
       <div className="p-6 space-y-6">
 
-        {/* Month Selector */}
+        {/* ── NAVEGAÇÃO DE MÊS ── */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => setMes(m => addMonth(m, -1))}
-            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-white font-semibold text-base min-w-[140px] text-center">
+          <span className="text-white font-semibold text-base min-w-[160px] text-center">
             {formatMesLabel(mes)}
           </span>
           <button
             onClick={() => setMes(m => addMonth(m, 1))}
-            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+          {loading && <span className="text-zinc-500 text-xs animate-pulse">Carregando...</span>}
         </div>
 
-        {/* KPI Cards */}
+        {/* ── ALERTAS ── */}
+        {!loading && (totalDespesas > receita && receita > 0 || lucro < 0) && (
+          <div className="space-y-2">
+            {totalDespesas > receita && receita > 0 && (
+              <div className="flex items-center gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-4 py-3">
+                <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+                <p className="text-yellow-300 text-sm">
+                  Atenção: as despesas ({formatCurrency(totalDespesas)}) superam a receita ({formatCurrency(receita)}) em {formatMesLabel(mes)}.
+                </p>
+              </div>
+            )}
+            {lucro < 0 && (
+              <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                <p className="text-red-300 text-sm">
+                  Lucro negativo em {formatMesLabel(mes)}: {formatCurrency(lucro)}. Revise as despesas ou aumente a receita.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── KPI CARDS ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-              <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Receita</p>
-            </div>
-            <p className="text-emerald-400 font-bold text-2xl">{formatCurrency(receita)}</p>
-            <p className="text-zinc-500 text-xs mt-1">Soma das taxas de contratos</p>
-          </div>
+          <KpiCard
+            label="Receita"
+            value={formatCurrency(receita)}
+            sub="soma das taxas de contratos"
+            icon={DollarSign}
+            color="#10B981"
+            colorClass="text-emerald-400"
+            bgClass="bg-emerald-500/10"
+          />
+          <KpiCard
+            label="Total Despesas"
+            value={formatCurrency(totalDespesas)}
+            sub={`${despesas.length} lançamento${despesas.length !== 1 ? 's' : ''} em ${formatMesLabel(mes)}`}
+            icon={TrendingDown}
+            color="#EF4444"
+            colorClass="text-red-400"
+            bgClass="bg-red-500/10"
+          />
+          <KpiCard
+            label="Lucro Líquido"
+            value={formatCurrency(lucro)}
+            sub="receita menos despesas"
+            icon={isPositive ? TrendingUp : TrendingDown}
+            color={isPositive ? '#10B981' : '#EF4444'}
+            colorClass={isPositive ? 'text-emerald-400' : 'text-red-400'}
+            bgClass={isPositive ? 'bg-emerald-500/10' : 'bg-red-500/10'}
+          />
+          <KpiCard
+            label="Margem"
+            value={`${margem.toFixed(1).replace('.', ',')}%`}
+            sub="lucro / receita"
+            icon={Percent}
+            color={isPositive ? '#10B981' : '#EF4444'}
+            colorClass={isPositive ? 'text-emerald-400' : 'text-red-400'}
+            bgClass={isPositive ? 'bg-emerald-500/10' : 'bg-red-500/10'}
+          />
+        </div>
 
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingDown className="w-4 h-4 text-red-400" />
-              <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Total Despesas</p>
-            </div>
-            <p className="text-red-400 font-bold text-2xl">{formatCurrency(totalDespesas)}</p>
-            <p className="text-zinc-500 text-xs mt-1">Mês de {formatMesLabel(mes)}</p>
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className={`w-4 h-4 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`} />
-              <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Lucro Líquido</p>
-            </div>
-            <p className={`font-bold text-2xl ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-              {formatCurrency(lucro)}
-            </p>
-            <p className="text-zinc-500 text-xs mt-1">Receita menos despesas</p>
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <Percent className={`w-4 h-4 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`} />
-              <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Margem</p>
-            </div>
-            <p className={`font-bold text-2xl ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-              {margem.toFixed(1).replace('.', ',')}%
-            </p>
-            <p className="text-zinc-500 text-xs mt-1">Lucro / Receita</p>
+        {/* ── ESTRUTURA FINANCEIRA ── */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <h3 className="text-white font-semibold text-sm mb-5">Estrutura Financeira — {formatMesLabel(mes)}</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { label: 'Receita', value: receita, bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400' },
+              { label: 'Despesas', value: totalDespesas, bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
+              {
+                label: 'Lucro', value: lucro,
+                bg: isPositive ? 'bg-violet-500/10' : 'bg-red-500/10',
+                border: isPositive ? 'border-violet-500/30' : 'border-red-500/30',
+                text: isPositive ? 'text-violet-400' : 'text-red-400',
+              },
+            ].map((item, i, arr) => (
+              <div key={item.label} className="flex items-center gap-2">
+                <div className={`${item.bg} border ${item.border} rounded-xl px-4 py-3 text-center min-w-[120px]`}>
+                  <p className="text-zinc-500 text-xs mb-1">{item.label}</p>
+                  <p className={`font-bold text-sm ${item.text}`}>{formatCurrency(item.value)}</p>
+                </div>
+                {i < arr.length - 1 && <ArrowRight className="w-4 h-4 text-zinc-600 shrink-0" />}
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* DRE */}
+        {/* ── GRÁFICO ── */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <h3 className="text-white font-semibold text-sm mb-5">Evolução Mensal — Últimos 6 Meses</h3>
+          <svg width="0" height="0" style={{ position: 'absolute' }}>
+            <defs>
+              <linearGradient id="finGradGreen" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="finGradRed" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="finGradViolet" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+          </svg>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+              <XAxis dataKey="mes" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis
+                tick={{ fill: '#71717a', fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+              />
+              <Tooltip content={<CurrencyTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11, color: '#a1a1aa', paddingTop: 12 }} />
+              <Area type="monotone" dataKey="Receita" stroke="#10B981" strokeWidth={2} fill="url(#finGradGreen)" dot={false} activeDot={{ r: 4, fill: '#10B981' }} />
+              <Area type="monotone" dataKey="Despesas" stroke="#EF4444" strokeWidth={2} fill="url(#finGradRed)" dot={false} activeDot={{ r: 4, fill: '#EF4444' }} />
+              <Area type="monotone" dataKey="Lucro" stroke="#8B5CF6" strokeWidth={2} fill="url(#finGradViolet)" dot={false} activeDot={{ r: 4, fill: '#8B5CF6' }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* ── DRE ── */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-zinc-800">
             <h3 className="text-white font-semibold text-base">DRE — Demonstrativo de Resultado</h3>
@@ -324,11 +535,9 @@ export default function FinanceiroPage() {
               {/* RECEITAS */}
               <div>
                 <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">Receitas</p>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-zinc-300 text-sm">Taxas de Contratos</span>
-                    <span className="text-white font-medium text-sm">{formatCurrency(receita)}</span>
-                  </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-zinc-300 text-sm">Taxas de Contratos</span>
+                  <span className="text-white font-medium text-sm">{formatCurrency(receita)}</span>
                 </div>
                 <div className="border-t border-zinc-700 mt-3 pt-3 flex items-center justify-between">
                   <span className="text-zinc-400 text-sm font-semibold">Total Receitas</span>
@@ -340,12 +549,11 @@ export default function FinanceiroPage() {
               <div>
                 <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">Despesas</p>
 
-                {/* Marketing automático — colapsável */}
                 {metaAdsSpend !== null && (
                   <div className="mb-2">
                     <button
                       onClick={() => toggleCat('__marketing__')}
-                      className="w-full flex items-center justify-between py-2 hover:bg-zinc-800/40 rounded-lg px-2 -mx-2 transition-colors group"
+                      className="w-full flex items-center justify-between py-2 hover:bg-zinc-800/40 rounded-lg px-2 -mx-2 transition-colors"
                     >
                       <span className="flex items-center gap-2 text-zinc-300 text-sm font-semibold">
                         Marketing
@@ -366,6 +574,7 @@ export default function FinanceiroPage() {
                     )}
                   </div>
                 )}
+
                 <div className="space-y-1">
                   {CATEGORIAS.map(({ key, label }) => {
                     const items = despesas.filter(d => d.categoria === key)
@@ -375,7 +584,6 @@ export default function FinanceiroPage() {
 
                     return (
                       <div key={key}>
-                        {/* Cabeçalho clicável da categoria */}
                         <button
                           onClick={() => { toggleCat(key); setAdding(null) }}
                           className="w-full flex items-center justify-between py-2 hover:bg-zinc-800/40 rounded-lg px-2 -mx-2 transition-colors"
@@ -392,7 +600,6 @@ export default function FinanceiroPage() {
                           </span>
                         </button>
 
-                        {/* Itens expandidos */}
                         {isExpanded && (
                           <div className="ml-4 space-y-1 mt-1 mb-2">
                             {items.map(d => (
@@ -408,7 +615,6 @@ export default function FinanceiroPage() {
                                       type="number"
                                       value={editing.valor}
                                       onChange={e => setEditing(s => s ? { ...s, valor: e.target.value } : s)}
-                                      placeholder="0,00"
                                       className="w-24 bg-zinc-800 border border-zinc-700 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500"
                                     />
                                     <button onClick={handleEdit} disabled={saving} className="text-emerald-400 hover:text-emerald-300 transition-colors">
@@ -488,48 +694,12 @@ export default function FinanceiroPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between py-2">
                     <span className="text-zinc-300 text-sm">Lucro Líquido</span>
-                    <span className={`font-bold text-sm ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {formatCurrency(lucro)}
-                    </span>
+                    <span className={`font-bold text-sm ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(lucro)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2">
                     <span className="text-zinc-300 text-sm">Margem</span>
-                    <span className={`font-bold text-sm ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {margem.toFixed(1).replace('.', ',')}%
-                    </span>
+                    <span className={`font-bold text-sm ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>{margem.toFixed(1).replace('.', ',')}%</span>
                   </div>
-                </div>
-              </div>
-
-              {/* DISTRIBUIÇÃO DE LUCRO */}
-              <div>
-                <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">Distribuição do Lucro</p>
-                <div className="space-y-2">
-                  {[
-                    { nome: 'Francisco', pct: 45.5 },
-                    { nome: 'Renan',     pct: 45.5 },
-                    { nome: 'Felipe',    pct: 5.0  },
-                    { nome: 'Marcelo',   pct: 4.0  },
-                  ].map(({ nome, pct }) => {
-                    const valor = lucro * (pct / 100)
-                    return (
-                      <div key={nome} className="flex items-center justify-between py-2">
-                        <div className="flex items-center gap-3">
-                          <span className="text-zinc-300 text-sm w-20">{nome}</span>
-                          <div className="w-24 bg-zinc-800 rounded-full h-1.5">
-                            <div
-                              className={`h-1.5 rounded-full ${isPositive ? 'bg-emerald-500/60' : 'bg-red-500/60'}`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <span className="text-zinc-500 text-xs">{pct}%</span>
-                        </div>
-                        <span className={`font-semibold text-sm ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {formatCurrency(valor)}
-                        </span>
-                      </div>
-                    )
-                  })}
                 </div>
               </div>
 
@@ -537,7 +707,42 @@ export default function FinanceiroPage() {
           )}
         </div>
 
-        {/* Seção de Conciliação Bancária OFX */}
+        {/* ── DISTRIBUIÇÃO DE LUCRO ── */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="p-1.5 rounded-lg bg-violet-500/10">
+              <Users className="w-3.5 h-3.5 text-violet-400" />
+            </div>
+            <h3 className="text-white font-semibold text-sm">Distribuição do Lucro — {formatMesLabel(mes)}</h3>
+          </div>
+          <div className="space-y-3">
+            {[
+              { nome: 'Francisco', pct: 45.5 },
+              { nome: 'Renan',     pct: 45.5 },
+              { nome: 'Felipe',    pct: 5.0  },
+              { nome: 'Marcelo',   pct: 4.0  },
+            ].map(({ nome, pct }) => {
+              const valor = lucro * (pct / 100)
+              return (
+                <div key={nome} className="flex items-center gap-4">
+                  <span className="text-zinc-300 text-sm w-20 shrink-0">{nome}</span>
+                  <div className="flex-1 bg-zinc-800 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${isPositive ? 'bg-emerald-500/70' : 'bg-red-500/70'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-zinc-500 text-xs w-10 text-right shrink-0">{pct}%</span>
+                  <span className={`font-semibold text-sm w-28 text-right shrink-0 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {formatCurrency(valor)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* ── CONCILIAÇÃO BANCÁRIA OFX ── */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
             <div>
@@ -551,13 +756,7 @@ export default function FinanceiroPage() {
               {ofxDone > 0 && (
                 <span className="text-emerald-400 text-xs font-medium">{ofxDone} despesa{ofxDone > 1 ? 's' : ''} adicionada{ofxDone > 1 ? 's' : ''} ✓</span>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".ofx,.OFX"
-                onChange={handleOFXUpload}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" accept=".ofx,.OFX" onChange={handleOFXUpload} className="hidden" />
               <button
                 onClick={() => { setOfxDone(0); fileInputRef.current?.click() }}
                 disabled={ofxLoading}
@@ -580,14 +779,11 @@ export default function FinanceiroPage() {
             <div className="p-6">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-zinc-400 text-sm">
-                  <span className="text-white font-semibold">{ofxTxs.length}</span> transações de <span className="text-white font-semibold">{formatMesLabel(mes)}</span> encontradas
-                  {ofxParaConciliar > 0 && <span className="text-emerald-400"> · {ofxParaConciliar} serão lançadas no DRE</span>}
+                  <span className="text-white font-semibold">{ofxTxs.length}</span> transações de <span className="text-white font-semibold">{formatMesLabel(mes)}</span>
+                  {ofxParaConciliar > 0 && <span className="text-emerald-400"> · {ofxParaConciliar} serão lançadas</span>}
                 </p>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setOfxTxs([]); setOfxCats({}); setOfxDescricoes({}) }}
-                    className="text-zinc-500 hover:text-zinc-300 text-xs transition-colors"
-                  >
+                  <button onClick={() => { setOfxTxs([]); setOfxCats({}); setOfxDescricoes({}) }} className="text-zinc-500 hover:text-zinc-300 text-xs transition-colors">
                     Cancelar
                   </button>
                   <button
@@ -600,7 +796,6 @@ export default function FinanceiroPage() {
                 </div>
               </div>
 
-              {/* Legenda rápida */}
               <div className="flex items-center gap-4 mb-4 text-xs text-zinc-500">
                 <button onClick={() => setOfxCats(prev => { const n = { ...prev }; ofxTxs.forEach(t => { if (t.tipo !== 'CREDIT') n[t.fitid] = 'variavel' }); return n })} className="hover:text-zinc-300 transition-colors underline">Selecionar todos débitos</button>
                 <button onClick={() => setOfxCats(prev => { const n = { ...prev }; ofxTxs.forEach(t => { n[t.fitid] = 'ignorar' }); return n })} className="hover:text-zinc-300 transition-colors underline">Ignorar todos</button>
@@ -666,7 +861,7 @@ export default function FinanceiroPage() {
             <div className="px-6 py-8 text-center">
               <Upload className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
               <p className="text-zinc-500 text-sm">Nenhum extrato carregado</p>
-              <p className="text-zinc-600 text-xs mt-1">Importe um arquivo .OFX do seu banco para fazer a conciliação do mês de {formatMesLabel(mes)}</p>
+              <p className="text-zinc-600 text-xs mt-1">Importe um arquivo .OFX do seu banco para fazer a conciliação de {formatMesLabel(mes)}</p>
             </div>
           )}
         </div>
