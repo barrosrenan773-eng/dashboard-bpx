@@ -24,6 +24,7 @@ import {
   BarChart2,
   Hash,
   Percent,
+  Users,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -645,6 +646,56 @@ export default function GeralPage() {
             </div>
           </div>
         </div>
+
+        {/* ── DISTRIBUIÇÃO DE LUCROS ── */}
+        {!loading && (
+          <div className="bg-zinc-900 border border-zinc-800 border-t-2 rounded-xl p-5" style={{ borderTopColor: '#8B5CF6' }}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="p-1.5 rounded-lg bg-violet-500/10">
+                  <Users className="w-3.5 h-3.5 text-violet-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-sm">Distribuição de Lucros</h3>
+                  <p className="text-zinc-500 text-xs mt-0.5">Baseada no lucro líquido do período selecionado</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-zinc-500 text-xs">Lucro do período</p>
+                <p className={`font-bold text-sm ${lucro >= 0 ? 'text-violet-400' : 'text-red-400'}`}>
+                  {formatCurrency(lucro)}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { nome: 'Francisco', pct: 45.5 },
+                { nome: 'Renan',     pct: 45.5 },
+                { nome: 'Felipe',    pct: 5.0  },
+                { nome: 'Marcelo',   pct: 4.0  },
+              ].map(({ nome, pct }) => {
+                const valor = lucro * (pct / 100)
+                const isPos = lucro >= 0
+                return (
+                  <div key={nome} className="flex items-center gap-4">
+                    <span className="text-zinc-300 text-sm w-20 shrink-0">{nome}</span>
+                    <div className="flex-1 bg-zinc-800 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${isPos ? 'bg-violet-500/70' : 'bg-red-500/70'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-zinc-500 text-xs w-10 text-right shrink-0">{pct}%</span>
+                    <span className={`font-semibold text-sm w-28 text-right shrink-0 ${isPos ? 'text-violet-400' : 'text-red-400'}`}>
+                      {formatCurrency(valor)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
