@@ -15,6 +15,9 @@ import {
   LogOut,
   Target,
   Calculator,
+  DollarSign,
+  FileText,
+  Banknote,
 } from 'lucide-react'
 
 const ALL_NAV = [
@@ -24,6 +27,9 @@ const ALL_NAV = [
   { href: '/dashboard/produtos', label: 'Produtos', icon: ShoppingCart, adminOnly: true },
   { href: '/dashboard/meta/metas', label: 'Metas', icon: Target, adminOnly: false },
   { href: '/dashboard/precificacao', label: 'Precificação', icon: Calculator, adminOnly: false, roles: ['admin', 'financeiro'] },
+  { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign, adminOnly: false, roles: ['admin', 'financeiro'] },
+  { href: '/dashboard/contratos', label: 'Contratos', icon: FileText, adminOnly: false, roles: ['admin', 'financeiro'] },
+  { href: '/dashboard/caixa', label: 'Caixa', icon: Banknote, adminOnly: false, roles: ['admin', 'financeiro'] },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart2, adminOnly: true },
   { href: '/dashboard/configuracoes', label: 'Configurações', icon: Settings, adminOnly: true },
 ]
@@ -43,7 +49,7 @@ export function Sidebar() {
   }, [])
 
   const navItems = ALL_NAV.filter(item => {
-    if (role === 'admin') return true
+    if (role === 'admin' || role === null) return true
     if (item.roles) return item.roles.includes(role as string)
     return !item.adminOnly
   })
