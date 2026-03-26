@@ -44,6 +44,7 @@ function TVContent() {
   const [metasVendedores, setMetasVendedores] = useState<Record<string, number>>({})
   const [metaSites, setMetaSites] = useState<Record<string, { spend: number; roas: number }>>({})
   const [metaVend, setMetaVend] = useState<{ spend: number; spendByVendedor: Record<string, number> }>({ spend: 0, spendByVendedor: {} })
+  const [googleAdsSpend, setGoogleAdsSpend] = useState(0)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState('')
   const [isFullscreen, setIsFullscreen] = useState(false)

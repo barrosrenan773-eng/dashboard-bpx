@@ -74,7 +74,7 @@ export default function PrintPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
               <span style={{ fontSize: 28, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>
-                Damatta<span style={{ color: '#10b981' }}>.</span>
+                BPX<span style={{ color: '#10b981' }}>.</span>
               </span>
               <span style={{ color: '#3f3f46', fontSize: 20 }}>|</span>
               <span style={{ fontSize: 18, fontWeight: 600, color: '#e4e4e7' }}>Relatório Executivo</span>
@@ -218,7 +218,7 @@ export default function PrintPage() {
 
         {/* Rodapé */}
         <div className="footer">
-          Damatta. — Relatório Executivo {MES_REF} — Gerado em {dataGeracao} — Documento de uso interno
+          BPX. — Relatório Executivo {MES_REF} — Gerado em {dataGeracao} — Documento de uso interno
         </div>
 
       </div>

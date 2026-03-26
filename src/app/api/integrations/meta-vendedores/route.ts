@@ -54,13 +54,13 @@ export async function GET(request: Request) {
         'GABRIELLY': 'Gabrielly Oliveira',
         'AMANDA': 'Amanda Oliveira',
         'TAYNARA': 'Taynara Silva',
-        'ARTHUR': 'Arthur Damatta',
+        'ARTHUR': 'Arthur BPX',
         'ALINE': 'Aline  Rodrigues ',
         'DANIELE': 'Daniele  santos ',
         'MAIARA': 'Maiara damatta',
         'JUNIOR': 'Junior  Silva',
         'RAYANE': 'Rayane  damatta ',
-        'PAMELLA': 'Pamella Damatta',
+        'PAMELLA': 'Pamella BPX',
         'ADRIANE': 'Adriane  Souza ',
       }
 
@@ -73,7 +73,8 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ spendByVendedor, usdBrl })
+    const totalSpend = Object.values(spendByVendedor).reduce((s, v) => s + v, 0)
+    return NextResponse.json({ spendByVendedor, totalSpend, usdBrl })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

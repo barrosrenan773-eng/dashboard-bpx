@@ -148,6 +148,7 @@ function DashboardContent() {
   const [metasVendedores, setMetasVendedores] = useState<Record<string, number>>({})
   const [metaSites, setMetaSites] = useState<Record<string, { spend: number; roas: number }>>({})
   const [metaVend, setMetaVend] = useState<{ spend: number; spendByVendedor: Record<string, number> }>({ spend: 0, spendByVendedor: {} })
+  const [googleAdsSpend, setGoogleAdsSpend] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const daysInMonth = new Date(parseInt(mes.slice(0, 4)), parseInt(mes.slice(5, 7)), 0).getDate()
@@ -170,6 +171,8 @@ function DashboardContent() {
           .then(r => r.json()).catch(() => ({}))
       ),
       fetch(`/api/integrations/meta-vendedores?start=${start}&end=${end}`)
+        .then(r => r.json()).catch(() => ({})),
+      fetch(`/api/integrations/google-ads?start=${start}&end=${end}`)
         .then(r => r.json()).catch(() => ({})),
     ]).then(results => {
       const lojas: Record<string, any> = {}
@@ -197,6 +200,9 @@ function DashboardContent() {
         spend: Object.values(vendData.spendByVendedor || {}).reduce((s: number, v: any) => s + v, 0),
         spendByVendedor: vendData.spendByVendedor || {},
       })
+
+      const gadsData = results[LOJAS.length + 4 + lojasComMeta.length] || {}
+      setGoogleAdsSpend(gadsData.totalSpend || 0)
 
       setLoading(false)
     })
@@ -282,14 +288,14 @@ function DashboardContent() {
                 },
                 {
                   label: 'Gasto em tráfego',
-                  value: formatCurrency(metaVend.spend + totalSpendLojas),
-                  sub: 'Meta Ads (todos)',
+                  value: formatCurrency(metaVend.spend + totalSpendLojas + googleAdsSpend),
+                  sub: 'Meta Ads + Google Ads',
                   color: 'text-white',
                 },
                 {
                   label: 'ROAS geral',
-                  value: (metaVend.spend + totalSpendLojas) > 0
-                    ? `${(receitaTotal / (metaVend.spend + totalSpendLojas)).toFixed(1)}x`
+                  value: (metaVend.spend + totalSpendLojas + googleAdsSpend) > 0
+                    ? `${(receitaTotal / (metaVend.spend + totalSpendLojas + googleAdsSpend)).toFixed(1)}x`
                     : '—',
                   sub: 'receita ÷ gasto mídia',
                   color: 'text-white',

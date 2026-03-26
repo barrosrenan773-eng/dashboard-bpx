@@ -41,46 +41,32 @@ export async function GET(request: Request) {
     let page = 1
     const maxPages = 100
 
-    // Busca 14 dias antes do start para capturar pedidos criados antes mas pagos dentro do período
-    const lookbackDate = startDate
-      ? new Date(new Date(startDate).getTime() - 14 * 86400000).toISOString().slice(0, 10)
-      : ''
-
     while (page <= maxPages) {
       const res = await axios.get(baseUrl, { headers, params: { limit: 100, page } })
       const orders: any[] = res.data.data || []
       if (orders.length === 0) break
-      allOrders = allOrders.concat(orders)
 
-      const lastDate = (orders[orders.length - 1]?.created_at?.date || orders[orders.length - 1]?.created_at || '').trim().slice(0, 10)
-      if (lookbackDate && lastDate < lookbackDate) break
+      let passedStart = false
+      for (const o of orders) {
+        const dateStr = (o.created_at?.date || o.created_at || '').slice(0, 10)
+        if (startDate && dateStr < startDate) { passedStart = true; break }
+        if (!endDate || dateStr <= endDate) allOrders.push(o)
+      }
 
-      const meta = res.data.meta?.pagination
-      if (!meta || page >= meta.total_pages) break
+      if (passedStart) break
       page++
     }
 
-    // Filtra por data de captura da transação (captured_at) para bater com o relatório da Yampi
-    // status válidos: 3=aprovado, 4=pago, 6=em transporte, 7=entregue, 10=faturado
-    const paid = allOrders.filter((o: any) => {
-      if (![3, 4, 6, 7, 10].includes(o.status_id)) return false
-      const txns: any[] = o.transactions?.data || []
-      const paidTxn = txns.find((t: any) => t.status === 'paid' && t.captured_at)
-      if (!paidTxn) return false
-      const capturedDate = (paidTxn.captured_at?.date || paidTxn.captured_at || '').trim().slice(0, 10)
-      return capturedDate >= startDate && capturedDate <= endDate
-    })
-
+    // status 4 = pago, status 6 = enviado
+    const paid = allOrders.filter((o: any) => o.status_id === 4 || o.status_id === 6)
     const revenue = paid.reduce((s: number, o: any) => s + parseFloat(o.value_total || 0), 0)
     const orders = paid.length
     const avgTicket = orders > 0 ? revenue / orders : 0
 
-    // Dados diários por data de captura do pagamento
+    // Dados diários para gráfico
     const byDate: Record<string, { revenue: number; orders: number }> = {}
     for (const o of paid) {
-      const txns: any[] = o.transactions?.data || []
-      const paidTxn = txns.find((t: any) => t.status === 'paid' && t.captured_at)
-      const date = (paidTxn?.captured_at?.date || o.created_at?.date || '').trim().slice(0, 10)
+      const date = (o.created_at?.date || o.created_at || '').slice(0, 10)
       if (!byDate[date]) byDate[date] = { revenue: 0, orders: 0 }
       byDate[date].revenue += parseFloat(o.value_total || 0)
       byDate[date].orders++

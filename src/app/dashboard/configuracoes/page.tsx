@@ -1,5 +1,6 @@
+import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
-import { CheckCircle, XCircle, AlertCircle, ExternalLink } from 'lucide-react'
+import { CheckCircle, XCircle, AlertCircle, ExternalLink, Users } from 'lucide-react'
 
 const perfis = [
   { role: 'admin', label: 'Administrador', desc: 'Acesso total — vê tudo e pode configurar' },
@@ -71,6 +72,20 @@ export default function ConfiguracoesPage() {
       <Header title="Configurações" />
 
       <div className="p-6 space-y-8">
+
+        {/* Usuários */}
+        <div className="max-w-2xl">
+          <h2 className="text-white font-semibold text-base mb-4">Usuários e Acessos</h2>
+          <Link href="/dashboard/configuracoes/usuarios" className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-5 transition-colors group">
+            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <Users className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-white font-medium text-sm group-hover:text-emerald-400 transition-colors">Gerenciar Usuários</p>
+              <p className="text-zinc-500 text-xs mt-0.5">Criar contas, definir acessos e remover usuários</p>
+            </div>
+          </Link>
+        </div>
 
         {/* Perfis de acesso */}
         <div className="max-w-2xl">

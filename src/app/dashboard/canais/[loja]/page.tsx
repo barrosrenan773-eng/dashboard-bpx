@@ -1,12 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
-import { ArrowLeft, TrendingUp, ShoppingCart, Users, MousePointerClick } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 
 const LOJAS: Record<string, { label: string; cor: string }> = {
@@ -15,16 +15,38 @@ const LOJAS: Record<string, { label: string; cor: string }> = {
   'farma': { label: 'BPX Farma', cor: 'purple' },
 }
 
-const MES_ATUAL_START = '2026-03-01'
-const MES_ATUAL_END = new Date().toISOString().slice(0, 10)
+const CANAL_PT: Record<string, string> = {
+  'Organic Search': 'Busca Orgânica',
+  'Paid Search': 'Busca Paga',
+  'Organic Social': 'Social Orgânico',
+  'Paid Social': 'Social Pago',
+  'Direct': 'Direto',
+  'Referral': 'Referência',
+  'Email': 'E-mail',
+  'Display': 'Display',
+  'Affiliates': 'Afiliados',
+  'Unassigned': 'Não atribuído',
+  'Unknown': 'Desconhecido',
+  'Cross-network': 'Performance Max',
+  'SMS': 'SMS',
+  'Audio': 'Áudio',
+}
 
 export default function LojaDetailPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const loja = params.loja as string
   const lojaInfo = LOJAS[loja] || { label: loja, cor: 'zinc' }
 
+  const today = new Date().toISOString().slice(0, 10)
+  const firstOfMonth = today.slice(0, 7) + '-01'
+  const start = searchParams.get('start') || firstOfMonth
+  const end = searchParams.get('end') || today
+  const mes = start.slice(0, 7)
+
   const [ga4, setGa4] = useState<any>(null)
   const [yampi, setYampi] = useState<any>(null)
+  const [metas, setMetas] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [lastSync, setLastSync] = useState('carregando...')
   const [ga4Error, setGa4Error] = useState(false)
@@ -34,38 +56,47 @@ export default function LojaDetailPage() {
     if (!loja) return
 
     Promise.all([
-      fetch(`/api/integrations/ga4?loja=${loja}&start=${MES_ATUAL_START}&end=${MES_ATUAL_END}`)
+      fetch(`/api/integrations/ga4?loja=${loja}&start=${start}&end=${end}`)
         .then(r => r.json())
         .then(d => { if (d.error) { setGa4Error(true); return null } return d })
         .catch(() => { setGa4Error(true); return null }),
-      fetch(`/api/integrations/yampi-loja?loja=${loja}&start=${MES_ATUAL_START}&end=${MES_ATUAL_END}`)
+      fetch(`/api/integrations/yampi-loja?loja=${loja}&start=${start}&end=${end}`)
         .then(r => r.json())
         .then(d => { if (d.error) { setYampiError(true); return null } return d })
         .catch(() => { setYampiError(true); return null }),
-    ]).then(([ga4Data, yampiData]) => {
+      fetch(`/api/metas-loja?mes=${mes}`)
+        .then(r => r.json())
+        .catch(() => []),
+    ]).then(([ga4Data, yampiData, metasData]) => {
       setGa4(ga4Data)
       setYampi(yampiData)
+      const m = Array.isArray(metasData) ? metasData.find((x: any) => x.vendedor === loja) : null
+      setMetas(m || null)
       setLastSync('agora mesmo')
       setLoading(false)
     })
-  }, [loja])
+  }, [loja, start, end, mes])
 
   // Métricas calculadas
-  const sessions = ga4?.sessions ?? 0
   const activeUsers = ga4?.activeUsers ?? 0
   const bounceRate = ga4?.bounceRate ?? 0
   const conversionRate = ga4?.conversionRate ?? 0
   const revenue = yampi?.revenue ?? ga4?.purchaseRevenue ?? 0
   const orders = yampi?.orders ?? ga4?.purchases ?? 0
   const avgTicket = yampi?.avgTicket ?? (orders > 0 ? revenue / orders : 0)
+  const revenuePerUser = activeUsers > 0 ? revenue / activeUsers : 0
 
-  // Gráfico: merge GA4 (sessões) com Yampi (receita) por dia
-  const dailyMap: Record<string, { date: string; sessions: number; revenue: number; orders: number }> = {}
+  // Metas
+  const metaConversao: number = metas?.meta_conversao ?? 0
+  const metaUsuarios: number = metas?.meta_usuarios ?? 0
+
+  // Gráfico: merge GA4 com Yampi por dia
+  const dailyMap: Record<string, { date: string; users: number; revenue: number; orders: number }> = {}
   for (const d of ga4?.daily || []) {
-    dailyMap[d.date] = { date: d.date, sessions: d.sessions, revenue: 0, orders: 0 }
+    dailyMap[d.date] = { date: d.date, users: d.activeUsers ?? d.sessions ?? 0, revenue: 0, orders: 0 }
   }
   for (const d of yampi?.daily || []) {
-    if (!dailyMap[d.date]) dailyMap[d.date] = { date: d.date, sessions: 0, revenue: 0, orders: 0 }
+    if (!dailyMap[d.date]) dailyMap[d.date] = { date: d.date, users: 0, revenue: 0, orders: 0 }
     dailyMap[d.date].revenue = d.revenue
     dailyMap[d.date].orders = d.orders
   }
@@ -82,7 +113,7 @@ export default function LojaDetailPage() {
         {/* Breadcrumb */}
         <Link href="/dashboard/canais" className="flex items-center gap-2 text-zinc-500 hover:text-zinc-300 text-sm transition-colors w-fit">
           <ArrowLeft className="w-4 h-4" />
-          Voltar para Canais
+          Voltar para Sites
         </Link>
 
         {/* Avisos de integração */}
@@ -101,26 +132,42 @@ export default function LojaDetailPage() {
           </div>
         )}
 
-        {/* KPIs */}
+        {/* KPIs principais */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           <KPICard title="Receita" value={loading ? '...' : formatCurrency(revenue)} highlight="success" size="lg" />
           <KPICard title="Pedidos" value={loading ? '...' : formatNumber(orders)} size="lg" />
           <KPICard title="Ticket Médio" value={loading ? '...' : formatCurrency(avgTicket)} size="lg" />
-          <KPICard title="Conversão" value={loading ? '...' : formatPercent(conversionRate)} highlight={conversionRate >= 1 ? 'success' : 'warning'} size="lg" />
+          <KPICard title="Receita / Usuário" value={loading ? '...' : formatCurrency(revenuePerUser)} size="lg" />
         </div>
 
+        {/* KPIs com metas */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-          <KPICard title="Sessões" value={loading ? '...' : formatNumber(sessions)} size="lg" />
-          <KPICard title="Usuários Ativos" value={loading ? '...' : formatNumber(activeUsers)} size="lg" />
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <p className="text-zinc-500 text-xs mb-1">Taxa de Conversão</p>
+            <p className={`text-2xl font-bold ${metaConversao > 0 && conversionRate >= metaConversao ? 'text-emerald-400' : metaConversao > 0 ? 'text-amber-400' : 'text-white'}`}>
+              {loading ? '...' : formatPercent(conversionRate)}
+            </p>
+            {metaConversao > 0 && (
+              <p className="text-zinc-600 text-xs mt-1">Meta: {formatPercent(metaConversao)}</p>
+            )}
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <p className="text-zinc-500 text-xs mb-1">Usuários Ativos</p>
+            <p className={`text-2xl font-bold ${metaUsuarios > 0 && activeUsers >= metaUsuarios ? 'text-emerald-400' : metaUsuarios > 0 ? 'text-amber-400' : 'text-white'}`}>
+              {loading ? '...' : formatNumber(activeUsers)}
+            </p>
+            {metaUsuarios > 0 && (
+              <p className="text-zinc-600 text-xs mt-1">Meta: {formatNumber(metaUsuarios)}</p>
+            )}
+          </div>
           <KPICard title="Taxa de Rejeição" value={loading ? '...' : formatPercent(bounceRate * 100)} size="lg" />
-          <KPICard title="Receita / Sessão" value={loading ? '...' : formatCurrency(sessions > 0 ? revenue / sessions : 0)} size="lg" />
         </div>
 
-        {/* Gráfico Receita + Sessões por dia */}
+        {/* Gráfico Receita + Usuários por dia */}
         {chartData.length > 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <h3 className="text-white font-semibold mb-1">Receita e Sessões por dia</h3>
-            <p className="text-zinc-500 text-xs mb-4">Março 2026</p>
+            <h3 className="text-white font-semibold mb-1">Receita e Usuários por dia</h3>
+            <p className="text-zinc-500 text-xs mb-4">{start} → {end}</p>
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <defs>
@@ -128,7 +175,7 @@ export default function LojaDetailPage() {
                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id="colorSessions" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
@@ -136,7 +183,7 @@ export default function LojaDetailPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis dataKey="date" tick={{ fill: '#71717a', fontSize: 10 }} tickFormatter={d => d.slice(8)} />
                 <YAxis yAxisId="rev" tick={{ fill: '#71717a', fontSize: 10 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} width={50} />
-                <YAxis yAxisId="ses" orientation="right" tick={{ fill: '#71717a', fontSize: 10 }} width={40} />
+                <YAxis yAxisId="usr" orientation="right" tick={{ fill: '#71717a', fontSize: 10 }} width={40} />
                 <Tooltip
                   contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 8 }}
                   labelStyle={{ color: '#a1a1aa', fontSize: 11 }}
@@ -146,7 +193,7 @@ export default function LojaDetailPage() {
                   ]}
                 />
                 <Area yAxisId="rev" type="monotone" dataKey="revenue" name="Receita" stroke="#10b981" fill="url(#colorRevenue)" strokeWidth={2} dot={false} />
-                <Area yAxisId="ses" type="monotone" dataKey="sessions" name="Sessões" stroke="#3b82f6" fill="url(#colorSessions)" strokeWidth={2} dot={false} />
+                <Area yAxisId="usr" type="monotone" dataKey="users" name="Usuários" stroke="#3b82f6" fill="url(#colorUsers)" strokeWidth={2} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -160,7 +207,7 @@ export default function LojaDetailPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-zinc-800">
-                    {['Canal', 'Sessões', 'Usuários', 'Pedidos', 'Receita', 'Conversão'].map(h => (
+                    {['Canal', 'Usuários', 'Pedidos', 'Receita', 'Conversão'].map(h => (
                       <th key={h} className="text-left text-xs text-zinc-500 font-medium py-3 px-3 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -170,8 +217,7 @@ export default function LojaDetailPage() {
                     const conv = c.sessions > 0 ? (c.purchases / c.sessions) * 100 : 0
                     return (
                       <tr key={c.channel} className="hover:bg-zinc-800/30 transition-colors">
-                        <td className="py-3 px-3 text-white font-medium">{c.channel}</td>
-                        <td className="py-3 px-3 text-zinc-300">{formatNumber(c.sessions)}</td>
+                        <td className="py-3 px-3 text-white font-medium">{CANAL_PT[c.channel] || c.channel}</td>
                         <td className="py-3 px-3 text-zinc-300">{formatNumber(c.users)}</td>
                         <td className="py-3 px-3 text-emerald-400 font-medium">{formatNumber(c.purchases)}</td>
                         <td className="py-3 px-3 text-white font-semibold">{c.revenue > 0 ? formatCurrency(c.revenue) : '—'}</td>
@@ -186,7 +232,7 @@ export default function LojaDetailPage() {
         )}
 
         {/* Estado vazio */}
-        {!loading && sessions === 0 && orders === 0 && (
+        {!loading && activeUsers === 0 && orders === 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-10 text-center">
             <p className="text-zinc-500 text-sm">Nenhum dado disponível para esta loja ainda.</p>
             <p className="text-zinc-600 text-xs mt-2">Configure as credenciais no .env.local e reinicie o servidor.</p>

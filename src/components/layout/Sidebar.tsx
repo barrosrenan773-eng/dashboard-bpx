@@ -22,7 +22,7 @@ const ALL_NAV = [
   { href: '/dashboard/canais', label: 'Sites', icon: TrendingUp, adminOnly: true },
   { href: '/dashboard/vendedores', label: 'Vendedores', icon: Users, adminOnly: false },
   { href: '/dashboard/produtos', label: 'Produtos', icon: ShoppingCart, adminOnly: true },
-  { href: '/dashboard/metas', label: 'Metas', icon: Target, adminOnly: false },
+  { href: '/dashboard/meta/metas', label: 'Metas', icon: Target, adminOnly: false },
   { href: '/dashboard/precificacao', label: 'Precificação', icon: Calculator, adminOnly: false, roles: ['admin', 'financeiro'] },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart2, adminOnly: true },
   { href: '/dashboard/configuracoes', label: 'Configurações', icon: Settings, adminOnly: true },

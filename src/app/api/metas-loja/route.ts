@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const supabase = getSupabase()
   const body = await request.json()
-  const { loja, mes, meta } = body
+  const { loja, mes, meta, meta_conversao, meta_usuarios } = body
 
   if (!loja || !mes || meta === undefined) {
     return NextResponse.json({ error: 'loja, mes e meta são obrigatórios' }, { status: 400 })
@@ -38,7 +38,14 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from('metas_vendedor')
-    .upsert({ vendedor: loja, mes, meta, meta_leads: 0 }, { onConflict: 'vendedor,mes' })
+    .upsert({
+      vendedor: loja,
+      mes,
+      meta,
+      meta_leads: 0,
+      ...(meta_conversao !== undefined && { meta_conversao }),
+      ...(meta_usuarios !== undefined && { meta_usuarios }),
+    }, { onConflict: 'vendedor,mes' })
     .select()
     .single()
 

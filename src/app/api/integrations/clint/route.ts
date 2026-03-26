@@ -90,20 +90,29 @@ export async function GET(request: Request) {
       totalValue += v
     }
 
-    // Agrega leads por vendedor excluindo stage de automação "Boas-vindas (D+3)"
-    // Esse stage é criado automaticamente para retenção e não representa lead novo (igual ao pipeline do Clint)
+    // Agrega leads por vendedor deduplicando por telefone (evita duplicatas de automação)
+    const leadsSeenByVendedor: Record<string, Set<string>> = {}
     for (const d of allLeads) {
-      if (d.stage === 'Boas-vindas (D+3)') continue
       const name = d.user?.full_name || d.user?.email || 'Sem vendedor'
+      const phone = d.contact?.phone
+      if (!phone) continue // ignora leads sem telefone (ruído de automação)
+      if (!leadsSeenByVendedor[name]) leadsSeenByVendedor[name] = new Set()
+      if (leadsSeenByVendedor[name].has(phone)) continue // duplicata, ignora
+      leadsSeenByVendedor[name].add(phone)
       if (!byVendedor[name]) byVendedor[name] = { name, leads: 0, won: 0, revenue: 0 }
       byVendedor[name].leads++
     }
 
-    // Leads de hoje por vendedor (mesmo critério)
+    // Leads de hoje por vendedor (também deduplicados por telefone)
     const leadsHojePorVendedor: Record<string, number> = {}
+    const leadsHojeSeenByVendedor: Record<string, Set<string>> = {}
     for (const d of allLeadsHoje) {
-      if (d.stage === 'Boas-vindas (D+3)') continue
       const name = d.user?.full_name || d.user?.email || 'Sem vendedor'
+      const phone = d.contact?.phone
+      if (!phone) continue
+      if (!leadsHojeSeenByVendedor[name]) leadsHojeSeenByVendedor[name] = new Set()
+      if (leadsHojeSeenByVendedor[name].has(phone)) continue
+      leadsHojeSeenByVendedor[name].add(phone)
       leadsHojePorVendedor[name] = (leadsHojePorVendedor[name] || 0) + 1
     }
 
