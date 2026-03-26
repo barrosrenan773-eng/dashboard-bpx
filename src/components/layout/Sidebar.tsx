@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 
 const ALL_NAV = [
-  { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard, adminOnly: true },
+  { href: '/dashboard/geral', label: 'Visão Geral', icon: LayoutDashboard, adminOnly: true },
   { href: '/dashboard/vendedores', label: 'Consultores', icon: Users, adminOnly: false },
   { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign, adminOnly: false, roles: ['admin', 'financeiro'] },
   { href: '/dashboard/contratos', label: 'Contratos', icon: FileText, adminOnly: false, roles: ['admin', 'financeiro'] },
