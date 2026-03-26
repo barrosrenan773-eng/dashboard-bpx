@@ -69,30 +69,32 @@ export default async function GeralPage({ searchParams }: { searchParams: Promis
   const supabase = getSupabase()
 
   // Busca dados em paralelo
-  const [{ data: contratos }, { data: despesas }, metaAds] = await Promise.all([
-    supabase.from('contratos').select('taxa, capital, status'),
-    supabase.from('despesas').select('valor, categoria').eq('mes', mes),
+  const [contratosRes, despesasRes, metaAds] = await Promise.all([
+    supabase.from('contratos').select('taxa, capital, status').catch(() => ({ data: [] })),
+    supabase.from('despesas').select('valor, categoria').eq('mes', mes).catch(() => ({ data: [] })),
     getMetaAds(mes, start, end),
   ])
+  const contratos = contratosRes?.data ?? []
+  const despesas = despesasRes?.data ?? []
 
   // Contratos
-  const totalContratos = (contratos ?? []).length
-  const totalCapital = (contratos ?? []).reduce((s: number, c: { capital: number }) => s + (c.capital ?? 0), 0)
-  const finalizados = (contratos ?? []).filter((c: { status: string }) => c.status === 'finalizado').length
-  const totalTaxas = (contratos ?? []).reduce((s: number, c: { taxa: number }) => s + (c.taxa ?? 0), 0)
+  const totalContratos = contratos.length
+  const totalCapital = contratos.reduce((s: number, c: { capital: number }) => s + (c.capital ?? 0), 0)
+  const finalizados = contratos.filter((c: { status: string }) => c.status === 'finalizado').length
+  const totalTaxas = contratos.reduce((s: number, c: { taxa: number }) => s + (c.taxa ?? 0), 0)
 
   // Financeiro
-  const totalDespesasManual = (despesas ?? []).reduce((s: number, d: { valor: number }) => s + (d.valor ?? 0), 0)
+  const totalDespesasManual = despesas.reduce((s: number, d: { valor: number }) => s + (d.valor ?? 0), 0)
   const marketing = metaAds?.spend ?? 0
   const totalDespesas = totalDespesasManual + marketing
   const lucro = totalTaxas - totalDespesas
   const margem = totalTaxas > 0 ? (lucro / totalTaxas) * 100 : 0
 
   const despesasPorCategoria = {
-    fixa: (despesas ?? []).filter((d: { categoria: string }) => d.categoria === 'fixa').reduce((s: number, d: { valor: number }) => s + d.valor, 0),
-    variavel: (despesas ?? []).filter((d: { categoria: string }) => d.categoria === 'variavel').reduce((s: number, d: { valor: number }) => s + d.valor, 0),
-    pix: (despesas ?? []).filter((d: { categoria: string }) => d.categoria === 'pix').reduce((s: number, d: { valor: number }) => s + d.valor, 0),
-    pessoal: (despesas ?? []).filter((d: { categoria: string }) => d.categoria === 'pessoal').reduce((s: number, d: { valor: number }) => s + d.valor, 0),
+    fixa: despesas.filter((d: { categoria: string }) => d.categoria === 'fixa').reduce((s: number, d: { valor: number }) => s + d.valor, 0),
+    variavel: despesas.filter((d: { categoria: string }) => d.categoria === 'variavel').reduce((s: number, d: { valor: number }) => s + d.valor, 0),
+    pix: despesas.filter((d: { categoria: string }) => d.categoria === 'pix').reduce((s: number, d: { valor: number }) => s + d.valor, 0),
+    pessoal: despesas.filter((d: { categoria: string }) => d.categoria === 'pessoal').reduce((s: number, d: { valor: number }) => s + d.valor, 0),
   }
 
   return (

@@ -25,7 +25,7 @@ export default function LoginPage() {
       return
     }
 
-    router.push('/dashboard/geral')
+    router.push('/dashboard/vendedores')
   }
 
   return (
