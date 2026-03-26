@@ -1,70 +1,10 @@
 'use client'
 
-import { Suspense } from 'react'
-import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Bell, RefreshCw, Tv2 } from 'lucide-react'
+import { Bell, RefreshCw } from 'lucide-react'
 
 interface HeaderProps {
   title: string
   lastSync?: string
-}
-
-function DateFilter() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const pathname = usePathname()
-
-  const today = new Date().toISOString().slice(0, 10)
-  const firstOfMonth = today.slice(0, 7) + '-01'
-  const start = searchParams.get('start') || firstOfMonth
-  const end = searchParams.get('end') || today
-
-  function updateDate(key: 'start' | 'end', value: string) {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set(key, value)
-    router.push(`${pathname}?${params.toString()}`)
-  }
-
-  return (
-    <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5">
-      <span className="text-zinc-500 text-xs">De:</span>
-      <input
-        type="date"
-        value={start}
-        max={end}
-        onChange={e => updateDate('start', e.target.value)}
-        className="bg-transparent text-zinc-200 text-sm focus:outline-none [color-scheme:dark] cursor-pointer"
-      />
-      <span className="text-zinc-600 text-xs mx-1">→</span>
-      <span className="text-zinc-500 text-xs">Até:</span>
-      <input
-        type="date"
-        value={end}
-        min={start}
-        max={today}
-        onChange={e => updateDate('end', e.target.value)}
-        className="bg-transparent text-zinc-200 text-sm focus:outline-none [color-scheme:dark] cursor-pointer"
-      />
-    </div>
-  )
-}
-
-function TVButton() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const pathname = usePathname()
-
-  function enterTV() {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('tv', '1')
-    router.push(`${pathname}?${params.toString()}`)
-  }
-
-  return (
-    <button onClick={enterTV} title="Modo TV" className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
-      <Tv2 className="w-4 h-4" />
-    </button>
-  )
 }
 
 export function Header({ title, lastSync }: HeaderProps) {
@@ -79,14 +19,6 @@ export function Header({ title, lastSync }: HeaderProps) {
             Atualizado {lastSync}
           </span>
         )}
-
-        <Suspense fallback={<div className="w-64 h-8 bg-zinc-900 rounded-lg animate-pulse" />}>
-          <DateFilter />
-        </Suspense>
-
-        <Suspense fallback={null}>
-          <TVButton />
-        </Suspense>
 
         <button className="relative p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
           <Bell className="w-4 h-4" />
