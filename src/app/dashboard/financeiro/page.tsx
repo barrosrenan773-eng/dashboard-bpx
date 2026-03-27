@@ -33,7 +33,13 @@ import {
   AlertTriangle,
   ArrowRight,
   Users,
+  CreditCard,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
 } from 'lucide-react'
+import { calcularDistribuicaoLucro, mesLabelCurto, KPI_LABELS } from '@/lib/calculos'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,6 +75,514 @@ type EditingState = {
   valor: string
 } | null
 
+// ─── Contas a Pagar ────────────────────────────────────────────────────────────
+
+type ContaPagar = {
+  id: number
+  descricao: string
+  fornecedor: string
+  categoria: string
+  valor: number
+  data_vencimento: string
+  status: 'a_vencer' | 'vencido' | 'pago'
+  data_pagamento: string | null
+  parcela_atual: number | null
+  total_parcelas: number | null
+  created_at: string
+}
+
+type ContaForm = {
+  tipo: 'unica' | 'fixa_mensal'
+  descricao: string
+  fornecedor: string
+  categoria: string
+  valor: string
+  // unica
+  data_vencimento: string
+  parcela_atual: string
+  total_parcelas: string
+  // fixa_mensal
+  dia_vencimento: string
+  mes_inicio: string
+  mes_fim: string
+}
+
+const CONTA_CATEGORIAS = [
+  'fornecedores', 'aluguel', 'utilities', 'impostos', 'salarios',
+  'marketing', 'software', 'equipamentos', 'outros',
+]
+
+const FORM_VAZIO: ContaForm = {
+  tipo: 'unica',
+  descricao: '', fornecedor: '', categoria: 'outros', valor: '',
+  data_vencimento: '', parcela_atual: '', total_parcelas: '',
+  dia_vencimento: '10',
+  mes_inicio: new Date().toISOString().slice(0, 7),
+  mes_fim: '',
+}
+
+function statusLabel(s: ContaPagar['status']) {
+  if (s === 'pago')    return { label: 'Pago',     color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' }
+  if (s === 'vencido') return { label: 'Vencido',  color: 'text-red-400',     bg: 'bg-red-500/15 border-red-500/30' }
+  return                      { label: 'A vencer', color: 'text-blue-400',    bg: 'bg-blue-500/15 border-blue-500/30' }
+}
+
+// Gera lista de YYYY-MM de mes_inicio até mes_fim inclusive
+function gerarMeses(inicio: string, fim: string): string[] {
+  const meses: string[] = []
+  const [yi, mi] = inicio.split('-').map(Number)
+  const [yf, mf] = fim.split('-').map(Number)
+  let y = yi, m = mi
+  while (y < yf || (y === yf && m <= mf)) {
+    meses.push(`${y}-${String(m).padStart(2, '0')}`)
+    m++; if (m > 12) { m = 1; y++ }
+  }
+  return meses
+}
+
+function ContasPagarModal({ onClose }: { onClose: () => void }) {
+  const hoje = new Date().toISOString().slice(0, 10)
+  const dozeAtras = new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().slice(0, 10)
+  const umAnoFrente = new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().slice(0, 10)
+  const mesAtual = new Date().toISOString().slice(0, 7)
+
+  const [contas, setContas]         = useState<ContaPagar[]>([])
+  const [loadingC, setLoadingC]     = useState(true)
+  const [filtroStatus, setFiltroStatus] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [filtroInicio, setFiltroInicio]     = useState(dozeAtras)
+  const [filtroFim, setFiltroFim]           = useState(umAnoFrente)
+  const [adicionando, setAdicionando] = useState(false)
+  const [editandoConta, setEditandoConta] = useState<ContaPagar | null>(null)
+  const [form, setForm] = useState<ContaForm>({ ...FORM_VAZIO, data_vencimento: hoje, mes_inicio: mesAtual })
+  const [salvando, setSalvando] = useState(false)
+  const [confirmExcluir, setConfirmExcluir] = useState<number | null>(null)
+
+  async function loadContas() {
+    setLoadingC(true)
+    const params = new URLSearchParams({ inicio: filtroInicio, fim: filtroFim })
+    if (filtroStatus)    params.set('status', filtroStatus)
+    if (filtroCategoria) params.set('categoria', filtroCategoria)
+    const r = await fetch(`/api/contas-pagar?${params}`)
+    const data = await r.json()
+    setContas(Array.isArray(data) ? data : [])
+    setLoadingC(false)
+  }
+
+  useEffect(() => { loadContas() }, [filtroStatus, filtroCategoria, filtroInicio, filtroFim])
+
+  function fecharForm() {
+    // Blur forçado: dismiss qualquer picker nativo (date/month) antes do React desmontar o form.
+    // Sem isso, browsers como Chrome/Safari/Firefox tentam remover elementos do picker
+    // que já não estão na árvore DOM → NotFoundError: removeChild
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+    setAdicionando(false)
+    setEditandoConta(null)
+    setForm({ ...FORM_VAZIO, data_vencimento: hoje, mes_inicio: mesAtual })
+  }
+
+  async function handleSalvar() {
+    const valor = parseFloat(form.valor.replace(',', '.'))
+    if (!form.descricao.trim() || !form.valor || isNaN(valor)) return
+
+    // Validações extras
+    if (form.tipo === 'unica' && !form.data_vencimento) return
+    if (form.tipo === 'fixa_mensal') {
+      if (!form.dia_vencimento || !form.mes_inicio || !form.mes_fim) return
+      if (form.mes_fim < form.mes_inicio) return
+    }
+    if (form.parcela_atual && form.total_parcelas && parseInt(form.parcela_atual) > parseInt(form.total_parcelas)) return
+
+    setSalvando(true)
+    let sucesso = false
+
+    try {
+      if (editandoConta) {
+        // Edição: sempre conta única
+        await fetch('/api/contas-pagar', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editandoConta.id,
+            descricao: form.descricao, fornecedor: form.fornecedor,
+            categoria: form.categoria, valor,
+            data_vencimento: form.data_vencimento,
+            parcela_atual: form.parcela_atual ? parseInt(form.parcela_atual) : null,
+            total_parcelas: form.total_parcelas ? parseInt(form.total_parcelas) : null,
+          }),
+        })
+      } else if (form.tipo === 'fixa_mensal') {
+        // Gera um registro por mês
+        const meses = gerarMeses(form.mes_inicio, form.mes_fim)
+        const dia = String(parseInt(form.dia_vencimento)).padStart(2, '0')
+        for (const mes of meses) {
+          await fetch('/api/contas-pagar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              descricao: form.descricao, fornecedor: form.fornecedor,
+              categoria: form.categoria, valor,
+              data_vencimento: `${mes}-${dia}`,
+            }),
+          })
+        }
+      } else {
+        // Conta única
+        await fetch('/api/contas-pagar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            descricao: form.descricao, fornecedor: form.fornecedor,
+            categoria: form.categoria, valor,
+            data_vencimento: form.data_vencimento,
+            parcela_atual: form.parcela_atual ? parseInt(form.parcela_atual) : null,
+            total_parcelas: form.total_parcelas ? parseInt(form.total_parcelas) : null,
+          }),
+        })
+      }
+      sucesso = true
+    } catch {
+      // mantém formulário aberto em caso de erro
+    } finally {
+      setSalvando(false)
+    }
+
+    if (sucesso) {
+      // 50ms garante que o browser finalize limpeza do picker nativo antes do React desmontar.
+      // setTimeout(0) era insuficiente em Chrome mobile, Safari e Firefox onde o picker
+      // demora mais para fechar, causando o NotFoundError: removeChild no usuário financeiro.
+      setTimeout(() => {
+        fecharForm()
+        loadContas()
+      }, 50)
+    }
+  }
+
+  async function handlePagar(id: number) {
+    await fetch('/api/contas-pagar', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, pagar: true }),
+    })
+    loadContas()
+  }
+
+  async function handleExcluir(id: number) {
+    await fetch(`/api/contas-pagar?id=${id}`, { method: 'DELETE' })
+    setConfirmExcluir(null)
+    loadContas()
+  }
+
+  function abrirEdicao(c: ContaPagar) {
+    setEditandoConta(c)
+    setAdicionando(true)
+    setForm({
+      ...FORM_VAZIO,
+      tipo: 'unica',
+      descricao: c.descricao, fornecedor: c.fornecedor, categoria: c.categoria,
+      valor: String(c.valor), data_vencimento: c.data_vencimento,
+      parcela_atual: c.parcela_atual != null ? String(c.parcela_atual) : '',
+      total_parcelas: c.total_parcelas != null ? String(c.total_parcelas) : '',
+    })
+  }
+
+  const totalPagar   = contas.filter(c => c.status !== 'pago').reduce((s, c) => s + Number(c.valor), 0)
+  const totalVencido = contas.filter(c => c.status === 'vencido').reduce((s, c) => s + Number(c.valor), 0)
+  const totalAvencer = contas.filter(c => c.status === 'a_vencer').reduce((s, c) => s + Number(c.valor), 0)
+  const totalPago    = contas.filter(c => c.status === 'pago').reduce((s, c) => s + Number(c.valor), 0)
+
+  const parcelasInvalidas = !!(form.parcela_atual && form.total_parcelas && parseInt(form.parcela_atual) > parseInt(form.total_parcelas))
+  const mesInvalido = form.tipo === 'fixa_mensal' && form.mes_fim && form.mes_inicio && form.mes_fim < form.mes_inicio
+  const qtdMeses = form.tipo === 'fixa_mensal' && form.mes_inicio && form.mes_fim && !mesInvalido
+    ? gerarMeses(form.mes_inicio, form.mes_fim).length : 0
+
+  const inputCls = "w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-orange-500"
+
+  return (
+    <div className="fixed inset-0 z-50 bg-zinc-950/95 backdrop-blur-sm flex flex-col overflow-hidden">
+      {/* Confirm excluir (sem confirm() nativo para evitar bugs de DOM) */}
+      {confirmExcluir !== null && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-80 shadow-2xl">
+            <p className="text-white font-semibold mb-1">Excluir conta?</p>
+            <p className="text-zinc-400 text-sm mb-5">Esta ação não pode ser desfeita.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmExcluir(null)} className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white text-sm transition-colors">Cancelar</button>
+              <button onClick={() => handleExcluir(confirmExcluir)} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors">Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-1.5 rounded-lg bg-orange-500/10">
+            <CreditCard className="w-4 h-4 text-orange-400" />
+          </div>
+          <div>
+            <h2 className="text-white font-semibold text-base">Contas a Pagar</h2>
+            <p className="text-zinc-500 text-xs">Gestão de compromissos financeiros</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setAdicionando(true); setEditandoConta(null); setForm({ ...FORM_VAZIO, data_vencimento: hoje, mes_inicio: mesAtual }) }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-500/20 border border-orange-500/30 text-orange-400 hover:bg-orange-500/30 text-sm font-medium transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Nova Conta
+          </button>
+          <button onClick={() => {
+            if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+            setTimeout(onClose, 50)
+          }} className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+        {/* KPIs */}
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          {[
+            { label: 'Total a Pagar', value: totalPagar,   color: '#F97316', colorClass: 'text-orange-400', bgClass: 'bg-orange-500/10', icon: CreditCard },
+            { label: 'Vencido',       value: totalVencido, color: '#EF4444', colorClass: 'text-red-400',    bgClass: 'bg-red-500/10',    icon: XCircle },
+            { label: 'A Vencer',      value: totalAvencer, color: '#3B82F6', colorClass: 'text-blue-400',   bgClass: 'bg-blue-500/10',   icon: Clock },
+            { label: 'Pago no Período', value: totalPago,  color: '#10B981', colorClass: 'text-emerald-400',bgClass: 'bg-emerald-500/10',icon: CheckCircle2 },
+          ].map(k => (
+            <div key={k.label} className="bg-zinc-900 border border-zinc-800 border-t-2 rounded-xl p-4" style={{ borderTopColor: k.color }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">{k.label}</p>
+                <div className={`p-1.5 rounded-lg ${k.bgClass}`}><k.icon className={`w-3.5 h-3.5 ${k.colorClass}`} /></div>
+              </div>
+              <p className={`font-bold text-xl ${k.colorClass}`}>{formatCurrency(k.value)}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Filtros */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-zinc-500 text-xs whitespace-nowrap">De</label>
+              <input type="date" value={filtroInicio} onChange={e => { const v = e.target.value; setTimeout(() => setFiltroInicio(v), 0) }}
+                className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-orange-500" />
+              <label className="text-zinc-500 text-xs">até</label>
+              <input type="date" value={filtroFim} onChange={e => { const v = e.target.value; setTimeout(() => setFiltroFim(v), 0) }}
+                className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-orange-500" />
+            </div>
+            <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-orange-500">
+              <option value="">Todos os status</option>
+              <option value="a_vencer">A vencer</option>
+              <option value="vencido">Vencido</option>
+              <option value="pago">Pago</option>
+            </select>
+            <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-orange-500">
+              <option value="">Todas as categorias</option>
+              {CONTA_CATEGORIAS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+            </select>
+            <button onClick={loadContas} className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-xs transition-colors">
+              <RefreshCw className="w-3 h-3" /> Atualizar
+            </button>
+            <span className="text-zinc-600 text-xs ml-auto">{contas.length} conta{contas.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+
+        {/* Formulário */}
+        {adicionando && (
+          <div className="bg-zinc-900 border border-orange-500/30 rounded-xl p-5">
+            <h3 className="text-white font-semibold text-sm mb-4">{editandoConta ? 'Editar Conta' : 'Nova Conta a Pagar'}</h3>
+
+            {/* Tipo — só exibe na criação */}
+            {!editandoConta && (
+              <div className="flex items-center gap-2 mb-4">
+                {(['unica', 'fixa_mensal'] as const).map(t => (
+                  <button key={t} onClick={() => setForm(f => ({ ...f, tipo: t }))}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${form.tipo === t ? 'bg-orange-500/20 border-orange-500/40 text-orange-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'}`}>
+                    {t === 'unica' ? 'Conta única' : 'Fixa mensal'}
+                  </button>
+                ))}
+                {form.tipo === 'fixa_mensal' && (
+                  <span className="text-zinc-500 text-xs ml-1">Gera um lançamento por mês automaticamente</span>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="xl:col-span-2">
+                <label className="text-zinc-500 text-xs mb-1 block">Descrição *</label>
+                <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+                  placeholder="Ex: Aluguel do escritório" className={inputCls} />
+              </div>
+              <div>
+                <label className="text-zinc-500 text-xs mb-1 block">Fornecedor</label>
+                <input value={form.fornecedor} onChange={e => setForm(f => ({ ...f, fornecedor: e.target.value }))}
+                  placeholder="Ex: Empresa XYZ" className={inputCls} />
+              </div>
+              <div>
+                <label className="text-zinc-500 text-xs mb-1 block">Categoria</label>
+                <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls}>
+                  {CONTA_CATEGORIAS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-zinc-500 text-xs mb-1 block">Valor *</label>
+                {/* inputMode evita o spinner do browser que causa removeChild */}
+                <input inputMode="decimal" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))}
+                  placeholder="0,00" className={inputCls} />
+              </div>
+
+              {/* Campos de conta única */}
+              {form.tipo === 'unica' && (
+                <>
+                  <div>
+                    <label className="text-zinc-500 text-xs mb-1 block">Vencimento *</label>
+                    <input type="date" value={form.data_vencimento} onChange={e => { const v = e.target.value; setTimeout(() => setForm(f => ({ ...f, data_vencimento: v })), 0) }} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="text-zinc-500 text-xs mb-1 block">Parcela atual</label>
+                    <input inputMode="numeric" value={form.parcela_atual} onChange={e => setForm(f => ({ ...f, parcela_atual: e.target.value }))}
+                      placeholder="Ex: 1" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="text-zinc-500 text-xs mb-1 block">Total de parcelas</label>
+                    <input inputMode="numeric" value={form.total_parcelas} onChange={e => setForm(f => ({ ...f, total_parcelas: e.target.value }))}
+                      placeholder="Ex: 12" className={inputCls} />
+                  </div>
+                </>
+              )}
+
+              {/* Campos de fixa mensal */}
+              {form.tipo === 'fixa_mensal' && (
+                <>
+                  <div>
+                    <label className="text-zinc-500 text-xs mb-1 block">Dia do vencimento *</label>
+                    <input inputMode="numeric" value={form.dia_vencimento} onChange={e => setForm(f => ({ ...f, dia_vencimento: e.target.value }))}
+                      placeholder="Ex: 10" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="text-zinc-500 text-xs mb-1 block">Mês inicial *</label>
+                    <input type="month" value={form.mes_inicio} onChange={e => { const v = e.target.value; setTimeout(() => setForm(f => ({ ...f, mes_inicio: v })), 0) }} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="text-zinc-500 text-xs mb-1 block">Mês final *</label>
+                    <input type="month" value={form.mes_fim} onChange={e => { const v = e.target.value; setTimeout(() => setForm(f => ({ ...f, mes_fim: v })), 0) }} className={inputCls} />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Avisos de validação */}
+            {parcelasInvalidas && <p className="text-red-400 text-xs mt-2">A parcela atual não pode ser maior que o total de parcelas.</p>}
+            {mesInvalido && <p className="text-red-400 text-xs mt-2">O mês final não pode ser anterior ao mês inicial.</p>}
+            {form.tipo === 'fixa_mensal' && qtdMeses > 0 && (
+              <p className="text-zinc-500 text-xs mt-2">Serão criados <span className="text-orange-400 font-medium">{qtdMeses} lançamentos</span> (um por mês).</p>
+            )}
+
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                onClick={handleSalvar}
+                disabled={salvando || !form.descricao.trim() || !form.valor || parcelasInvalidas || !!mesInvalido ||
+                  (form.tipo === 'unica' && !form.data_vencimento) ||
+                  (form.tipo === 'fixa_mensal' && (!form.dia_vencimento || !form.mes_inicio || !form.mes_fim))}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white text-sm font-semibold transition-colors">
+                <Check className="w-3.5 h-3.5" />
+                {salvando ? 'Salvando...' : editandoConta ? 'Salvar' : form.tipo === 'fixa_mensal' ? `Criar ${qtdMeses || ''} lançamentos` : 'Adicionar'}
+              </button>
+              <button onClick={fecharForm} className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white text-sm transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tabela */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          {loadingC ? (
+            <div className="p-10 text-center">
+              <RefreshCw className="w-5 h-5 text-zinc-600 animate-spin mx-auto mb-2" />
+              <p className="text-zinc-500 text-sm">Carregando contas...</p>
+            </div>
+          ) : contas.length === 0 ? (
+            <div className="p-10 text-center">
+              <CreditCard className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
+              <p className="text-zinc-500 text-sm">Nenhuma conta encontrada</p>
+              <p className="text-zinc-600 text-xs mt-1">Clique em "Nova Conta" para adicionar um compromisso</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-zinc-800">
+                    {['Descrição','Fornecedor','Categoria','Valor','Vencimento','Parcela','Status','Pagamento','Ações'].map(h => (
+                      <th key={h} className="text-left text-xs text-zinc-500 font-medium uppercase tracking-wider py-3 px-4 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {contas.map(c => {
+                    const st = statusLabel(c.status)
+                    const vencido = c.status === 'vencido'
+                    return (
+                      <tr key={c.id} className={`hover:bg-zinc-800/30 transition-colors ${vencido ? 'bg-red-500/5' : ''}`}>
+                        <td className="py-3 px-4 text-white text-sm font-medium max-w-[200px] truncate">{c.descricao}</td>
+                        <td className="py-3 px-4 text-zinc-400 text-sm whitespace-nowrap">{c.fornecedor || '—'}</td>
+                        <td className="py-3 px-4">
+                          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full capitalize">{c.categoria}</span>
+                        </td>
+                        <td className="py-3 px-4 text-white font-semibold text-sm whitespace-nowrap">{formatCurrency(Number(c.valor))}</td>
+                        <td className={`py-3 px-4 text-sm whitespace-nowrap ${vencido ? 'text-red-400 font-medium' : 'text-zinc-300'}`}>
+                          {new Date(c.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {c.parcela_atual != null && c.total_parcelas != null
+                            ? <span className="text-xs font-medium bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full">{c.parcela_atual}/{c.total_parcelas}</span>
+                            : <span className="text-zinc-600 text-sm">—</span>}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${st.bg} ${st.color}`}>{st.label}</span>
+                        </td>
+                        <td className="py-3 px-4 text-zinc-500 text-sm whitespace-nowrap">
+                          {c.data_pagamento ? new Date(c.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            {c.status !== 'pago' && (
+                              <button onClick={() => handlePagar(c.id)} title="Marcar como pago"
+                                className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors">
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button onClick={() => abrirEdicao(c)} title="Editar"
+                              className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setConfirmExcluir(c.id)} title="Excluir"
+                              className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getCurrentMes(): string {
@@ -87,14 +601,6 @@ function formatMesLabel(mes: string): string {
   const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
   return `${months[m - 1]} ${y}`
-}
-
-function mesLabelShort(mes: string): string {
-  const [y, m] = mes.split('-').map(Number)
-  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', {
-    month: 'short',
-    year: '2-digit',
-  })
 }
 
 const CATEGORIAS = [
@@ -162,6 +668,7 @@ function KpiCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function FinanceiroPage() {
+  const [showContasPagar, setShowContasPagar] = useState(false)
   const [mes, setMes] = useState(getCurrentMes)
   const [despesas, setDespesas] = useState<Despesa[]>([])
   const [receita, setReceita] = useState(0)
@@ -272,7 +779,7 @@ export default function FinanceiroPage() {
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
     }
     return months.map(m => ({
-      mes: mesLabelShort(m + '-01'),
+      mes: mesLabelCurto(m + '-01'),
       Receita: histReceita[m] ?? 0,
       Despesas: histDespesas[m] ?? 0,
       Lucro: (histReceita[m] ?? 0) - (histDespesas[m] ?? 0),
@@ -371,6 +878,8 @@ export default function FinanceiroPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950">
+      {showContasPagar && <ContasPagarModal onClose={() => setShowContasPagar(false)} />}
+
       <Header title="Financeiro" lastSync="Atualizado agora" />
 
       <div className="p-6 space-y-6">
@@ -393,6 +902,13 @@ export default function FinanceiroPage() {
             <ChevronRight className="w-4 h-4" />
           </button>
           {loading && <span className="text-zinc-500 text-xs animate-pulse">Carregando...</span>}
+          <button
+            onClick={() => setShowContasPagar(true)}
+            className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-orange-500/50 hover:bg-orange-500/10 text-zinc-400 hover:text-orange-400 text-sm font-medium transition-all"
+          >
+            <CreditCard className="w-4 h-4" />
+            Contas a Pagar
+          </button>
         </div>
 
         {/* ── ALERTAS ── */}
@@ -420,7 +936,7 @@ export default function FinanceiroPage() {
         {/* ── KPI CARDS ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           <KpiCard
-            label="Receita"
+            label={KPI_LABELS.receita}
             value={formatCurrency(receita)}
             sub="soma das taxas de contratos"
             icon={DollarSign}
@@ -429,7 +945,7 @@ export default function FinanceiroPage() {
             bgClass="bg-emerald-500/10"
           />
           <KpiCard
-            label="Total Despesas"
+            label={KPI_LABELS.despesasTotal}
             value={formatCurrency(totalDespesas)}
             sub={`${despesas.length} lançamento${despesas.length !== 1 ? 's' : ''} em ${formatMesLabel(mes)}`}
             icon={TrendingDown}
@@ -438,7 +954,7 @@ export default function FinanceiroPage() {
             bgClass="bg-red-500/10"
           />
           <KpiCard
-            label="Lucro Líquido"
+            label={KPI_LABELS.lucro}
             value={formatCurrency(lucro)}
             sub="receita menos despesas"
             icon={isPositive ? TrendingUp : TrendingDown}
@@ -447,7 +963,7 @@ export default function FinanceiroPage() {
             bgClass={isPositive ? 'bg-emerald-500/10' : 'bg-red-500/10'}
           />
           <KpiCard
-            label="Margem"
+            label={KPI_LABELS.margem}
             value={`${margem.toFixed(1).replace('.', ',')}%`}
             sub="lucro / receita"
             icon={Percent}
@@ -462,10 +978,10 @@ export default function FinanceiroPage() {
           <h3 className="text-white font-semibold text-sm mb-5">Estrutura Financeira — {formatMesLabel(mes)}</h3>
           <div className="flex flex-wrap items-center gap-2">
             {[
-              { label: 'Receita', value: receita, bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400' },
-              { label: 'Despesas', value: totalDespesas, bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
+              { label: KPI_LABELS.receita, value: receita, bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400' },
+              { label: KPI_LABELS.despesas, value: totalDespesas, bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
               {
-                label: 'Lucro', value: lucro,
+                label: KPI_LABELS.lucro, value: lucro,
                 bg: isPositive ? 'bg-violet-500/10' : 'bg-red-500/10',
                 border: isPositive ? 'border-violet-500/30' : 'border-red-500/30',
                 text: isPositive ? 'text-violet-400' : 'text-red-400',
@@ -716,29 +1232,21 @@ export default function FinanceiroPage() {
             <h3 className="text-white font-semibold text-sm">Distribuição do Lucro — {formatMesLabel(mes)}</h3>
           </div>
           <div className="space-y-3">
-            {[
-              { nome: 'Francisco', pct: 45.5 },
-              { nome: 'Renan',     pct: 45.5 },
-              { nome: 'Felipe',    pct: 5.0  },
-              { nome: 'Marcelo',   pct: 4.0  },
-            ].map(({ nome, pct }) => {
-              const valor = lucro * (pct / 100)
-              return (
-                <div key={nome} className="flex items-center gap-4">
-                  <span className="text-zinc-300 text-sm w-20 shrink-0">{nome}</span>
-                  <div className="flex-1 bg-zinc-800 rounded-full h-1.5">
-                    <div
-                      className={`h-1.5 rounded-full transition-all ${isPositive ? 'bg-emerald-500/70' : 'bg-red-500/70'}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-zinc-500 text-xs w-10 text-right shrink-0">{pct}%</span>
-                  <span className={`font-semibold text-sm w-28 text-right shrink-0 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {formatCurrency(valor)}
-                  </span>
+            {calcularDistribuicaoLucro(lucro).map(({ nome, percentual, valor }) => (
+              <div key={nome} className="flex items-center gap-4">
+                <span className="text-zinc-300 text-sm w-20 shrink-0">{nome}</span>
+                <div className="flex-1 bg-zinc-800 rounded-full h-1.5">
+                  <div
+                    className={`h-1.5 rounded-full transition-all ${isPositive ? 'bg-emerald-500/70' : 'bg-red-500/70'}`}
+                    style={{ width: `${percentual}%` }}
+                  />
                 </div>
-              )
-            })}
+                <span className="text-zinc-500 text-xs w-10 text-right shrink-0">{percentual}%</span>
+                <span className={`font-semibold text-sm w-28 text-right shrink-0 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {formatCurrency(valor)}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
