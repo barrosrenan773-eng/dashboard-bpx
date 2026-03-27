@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Header } from '@/components/layout/Header'
 import { formatCurrency } from '@/lib/utils'
+import { KPI_LABELS as L } from '@/lib/calculos'
 import {
   Plus, Pencil, Trash2, X, Check,
   FileText, Briefcase, DollarSign, TrendingUp, Clock,
+  Upload, AlertCircle, Loader2,
 } from 'lucide-react'
 
 type Contrato = {
@@ -31,6 +33,17 @@ const STATUS_STYLE: Record<Contrato['status'], string> = {
 }
 
 const EMPTY_FORM = { nome: '', servico: '', capital: '', taxa: '', status: 'aguardando' as Contrato['status'] }
+
+type DocxPreview = {
+  nome: string | null
+  capital: number | null
+  taxa: number | null
+  total: number | null
+  troco: number | null
+  vencimento: string | null
+  servico: string
+  naoEncontrados: string[]
+}
 
 function KpiCard({
   label, value, sub, icon: Icon, color, colorClass, bgClass,
@@ -60,6 +73,12 @@ export default function ContratosPage() {
   const [editId, setEditId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Upload .docx
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [preview, setPreview] = useState<DocxPreview | null>(null)
 
   async function load() {
     setLoading(true)
@@ -123,6 +142,42 @@ export default function ContratosPage() {
     load()
   }
 
+  async function handleDocxUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setUploadError('')
+    setPreview(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await fetch('/api/contratos/parse-docx', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (data.error) { setUploadError(data.error); setUploading(false); return }
+      setPreview(data.campos ? { ...data.campos, naoEncontrados: data.naoEncontrados ?? [] } : null)
+    } catch (err) {
+      setUploadError(String(err))
+    }
+    setUploading(false)
+    e.target.value = ''
+  }
+
+  function handleConfirmarImport() {
+    if (!preview) return
+    setForm({
+      nome: preview.nome ?? '',
+      servico: preview.servico ?? '',
+      capital: preview.capital != null ? String(preview.capital) : '',
+      taxa: preview.taxa != null ? String(preview.taxa) : '',
+      status: 'aguardando',
+    })
+    setPreview(null)
+    setEditId(null)
+    setError('')
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const totalCapital = contratos.reduce((s, c) => s + c.capital, 0)
   const totalTaxas = contratos.reduce((s, c) => s + c.taxa, 0)
   const totalFinalizados = contratos.filter(c => c.status === 'finalizado').length
@@ -155,7 +210,7 @@ export default function ContratosPage() {
             bgClass="bg-blue-500/10"
           />
           <KpiCard
-            label="Receita Total"
+            label={L.receitaTotal}
             value={formatCurrency(totalTaxas)}
             sub="soma das taxas"
             icon={DollarSign}
@@ -182,6 +237,91 @@ export default function ContratosPage() {
             bgClass="bg-amber-500/10"
           />
         </div>
+
+        {/* ── UPLOAD DOCX ── */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".docx"
+          className="hidden"
+          onChange={handleDocxUpload}
+        />
+
+        {/* Preview de importação */}
+        {preview && (
+          <div className="bg-zinc-900 border border-emerald-500/30 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-500/10">
+                  <FileText className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="text-white font-semibold text-sm">Contrato lido com sucesso</h4>
+                  <p className="text-zinc-500 text-xs">Confira os dados antes de salvar</p>
+                </div>
+              </div>
+              <button onClick={() => setPreview(null)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+              {[
+                { label: 'Cliente', value: preview.nome, color: 'text-white' },
+                { label: 'Serviço', value: preview.servico, color: 'text-zinc-300' },
+                { label: 'Capital (Saldo Devedor)', value: preview.capital != null ? formatCurrency(preview.capital) : null, color: 'text-blue-400' },
+                { label: 'Taxa (Serv. Financeiros)', value: preview.taxa != null ? formatCurrency(preview.taxa) : null, color: 'text-emerald-400' },
+                { label: 'Total Devedor', value: preview.total != null ? formatCurrency(preview.total) : null, color: 'text-zinc-300' },
+                { label: 'Troco', value: preview.troco != null ? formatCurrency(preview.troco) : null, color: 'text-zinc-300' },
+                { label: 'Vencimento', value: preview.vencimento ? new Date(preview.vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : null, color: 'text-zinc-300' },
+              ].map(f => (
+                <div key={f.label} className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
+                  <p className="text-zinc-500 text-xs mb-0.5">{f.label}</p>
+                  {f.value ? (
+                    <p className={`text-sm font-semibold ${f.color}`}>{f.value}</p>
+                  ) : (
+                    <p className="text-zinc-600 text-xs italic">Não encontrado</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {preview.naoEncontrados.length > 0 && (
+              <div className="flex items-start gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2.5 mb-4">
+                <AlertCircle className="w-3.5 h-3.5 text-yellow-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-yellow-300 text-xs font-medium">Campos não identificados automaticamente:</p>
+                  <p className="text-yellow-400/70 text-xs mt-0.5">{preview.naoEncontrados.join(', ')} — você poderá preencher manualmente.</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleConfirmarImport}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
+              >
+                <Check className="w-4 h-4" />
+                Confirmar e editar
+              </button>
+              <button
+                onClick={() => setPreview(null)}
+                className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {uploadError && (
+          <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <p className="text-red-300 text-sm">{uploadError}</p>
+            <button onClick={() => setUploadError('')} className="ml-auto text-zinc-500 hover:text-zinc-300"><X className="w-4 h-4" /></button>
+          </div>
+        )}
 
         {/* ── FORMULÁRIO ── */}
         {showForm && (
@@ -280,13 +420,23 @@ export default function ContratosPage() {
                 <p className="text-zinc-500 text-xs mt-0.5">{contratos.length} registro{contratos.length !== 1 ? 's' : ''}</p>
               )}
             </div>
-            <button
-              onClick={() => { setShowForm(true); setEditId(null); setForm(EMPTY_FORM); setError('') }}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Novo Contrato
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                {uploading ? 'Lendo...' : 'Importar .docx'}
+              </button>
+              <button
+                onClick={() => { setShowForm(true); setEditId(null); setForm(EMPTY_FORM); setError('') }}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Novo Contrato
+              </button>
+            </div>
           </div>
 
           {loading ? (
