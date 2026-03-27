@@ -88,11 +88,12 @@ type ContaPagar = {
   data_pagamento: string | null
   parcela_atual: number | null
   total_parcelas: number | null
+  parcelamento_id: string | null
   created_at: string
 }
 
 type ContaForm = {
-  tipo: 'unica' | 'fixa_mensal'
+  tipo: 'unica' | 'parcelada' | 'fixa_mensal'
   descricao: string
   fornecedor: string
   categoria: string
@@ -188,7 +189,8 @@ function ContasPagarModal({ onClose }: { onClose: () => void }) {
     if (!form.descricao.trim() || !form.valor || isNaN(valor)) return
 
     // Validações extras
-    if (form.tipo === 'unica' && !form.data_vencimento) return
+    if ((form.tipo === 'unica' || form.tipo === 'parcelada') && !form.data_vencimento) return
+    if (form.tipo === 'parcelada' && !form.total_parcelas) return
     if (form.tipo === 'fixa_mensal') {
       if (!form.dia_vencimento || !form.mes_inicio || !form.mes_fim) return
       if (form.mes_fim < form.mes_inicio) return
@@ -211,6 +213,19 @@ function ContasPagarModal({ onClose }: { onClose: () => void }) {
             data_vencimento: form.data_vencimento,
             parcela_atual: form.parcela_atual ? parseInt(form.parcela_atual) : null,
             total_parcelas: form.total_parcelas ? parseInt(form.total_parcelas) : null,
+          }),
+        })
+      } else if (form.tipo === 'parcelada') {
+        // Conta parcelada: cria apenas a 1ª parcela — demais geradas automaticamente pelo cron/lazy
+        await fetch('/api/contas-pagar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            descricao: form.descricao, fornecedor: form.fornecedor,
+            categoria: form.categoria, valor, tipo: 'parcelada',
+            data_vencimento: form.data_vencimento,
+            parcela_atual: 1,
+            total_parcelas: parseInt(form.total_parcelas),
           }),
         })
       } else if (form.tipo === 'fixa_mensal') {
@@ -401,13 +416,16 @@ function ContasPagarModal({ onClose }: { onClose: () => void }) {
 
             {/* Tipo — só exibe na criação */}
             {!editandoConta && (
-              <div className="flex items-center gap-2 mb-4">
-                {(['unica', 'fixa_mensal'] as const).map(t => (
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                {(['unica', 'parcelada', 'fixa_mensal'] as const).map(t => (
                   <button key={t} onClick={() => setForm(f => ({ ...f, tipo: t }))}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${form.tipo === t ? 'bg-orange-500/20 border-orange-500/40 text-orange-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'}`}>
-                    {t === 'unica' ? 'Conta única' : 'Fixa mensal'}
+                    {t === 'unica' ? 'Conta única' : t === 'parcelada' ? 'Parcelada' : 'Fixa mensal'}
                   </button>
                 ))}
+                {form.tipo === 'parcelada' && (
+                  <span className="text-zinc-500 text-xs ml-1">Parcela 1 criada agora — próximas geradas automaticamente todo mês</span>
+                )}
                 {form.tipo === 'fixa_mensal' && (
                   <span className="text-zinc-500 text-xs ml-1">Gera um lançamento por mês automaticamente</span>
                 )}
@@ -458,6 +476,21 @@ function ContasPagarModal({ onClose }: { onClose: () => void }) {
                 </>
               )}
 
+              {/* Campos de conta parcelada (automática) */}
+              {form.tipo === 'parcelada' && (
+                <>
+                  <div>
+                    <label className="text-zinc-500 text-xs mb-1 block">1º Vencimento *</label>
+                    <input type="date" value={form.data_vencimento} onChange={e => { const v = e.target.value; setTimeout(() => setForm(f => ({ ...f, data_vencimento: v })), 0) }} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="text-zinc-500 text-xs mb-1 block">Total de parcelas *</label>
+                    <input inputMode="numeric" value={form.total_parcelas} onChange={e => setForm(f => ({ ...f, total_parcelas: e.target.value }))}
+                      placeholder="Ex: 12" className={inputCls} />
+                  </div>
+                </>
+              )}
+
               {/* Campos de fixa mensal */}
               {form.tipo === 'fixa_mensal' && (
                 <>
@@ -489,11 +522,12 @@ function ContasPagarModal({ onClose }: { onClose: () => void }) {
               <button
                 onClick={handleSalvar}
                 disabled={salvando || !form.descricao.trim() || !form.valor || parcelasInvalidas || !!mesInvalido ||
-                  (form.tipo === 'unica' && !form.data_vencimento) ||
+                  ((form.tipo === 'unica' || form.tipo === 'parcelada') && !form.data_vencimento) ||
+                  (form.tipo === 'parcelada' && !form.total_parcelas) ||
                   (form.tipo === 'fixa_mensal' && (!form.dia_vencimento || !form.mes_inicio || !form.mes_fim))}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white text-sm font-semibold transition-colors">
                 <Check className="w-3.5 h-3.5" />
-                {salvando ? 'Salvando...' : editandoConta ? 'Salvar' : form.tipo === 'fixa_mensal' ? `Criar ${qtdMeses || ''} lançamentos` : 'Adicionar'}
+                {salvando ? 'Salvando...' : editandoConta ? 'Salvar' : form.tipo === 'parcelada' ? `Criar parcela 1/${form.total_parcelas || '?'}` : form.tipo === 'fixa_mensal' ? `Criar ${qtdMeses || ''} lançamentos` : 'Adicionar'}
               </button>
               <button onClick={fecharForm} className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white text-sm transition-colors">
                 Cancelar
@@ -541,9 +575,18 @@ function ContasPagarModal({ onClose }: { onClose: () => void }) {
                           {new Date(c.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
-                          {c.parcela_atual != null && c.total_parcelas != null
-                            ? <span className="text-xs font-medium bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full">{c.parcela_atual}/{c.total_parcelas}</span>
-                            : <span className="text-zinc-600 text-sm">—</span>}
+                          {c.parcela_atual != null && c.total_parcelas != null ? (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs font-medium bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full">
+                                {c.parcela_atual}/{c.total_parcelas}
+                              </span>
+                              {c.parcelamento_id && (
+                                <span title="Parcela automática" className="text-orange-400/70">
+                                  <RefreshCw className="w-3 h-3" />
+                                </span>
+                              )}
+                            </div>
+                          ) : <span className="text-zinc-600 text-sm">—</span>}
                         </td>
                         <td className="py-3 px-4">
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${st.bg} ${st.color}`}>{st.label}</span>
