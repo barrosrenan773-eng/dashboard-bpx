@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatCurrency, formatNumber } from '@/lib/utils'
+import { KPI_LABELS as L } from '@/lib/calculos'
 import { DollarSign, TrendingUp, Target, Users } from 'lucide-react'
 
 type Consultor = { nome: string; deals: number; receita: number }
@@ -50,7 +51,7 @@ export function ClintSection({ mes, mesLabel }: { mes: string; mesLabel: string 
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Ticket Médio</p>
+            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">{L.ticketMedio}</p>
             <div className="p-1.5 bg-yellow-500/10 rounded-lg"><Target className="w-3.5 h-3.5 text-yellow-400" /></div>
           </div>
           <p className="text-white font-bold text-2xl">

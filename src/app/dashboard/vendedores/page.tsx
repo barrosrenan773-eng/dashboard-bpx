@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { formatCurrency, formatNumber } from '@/lib/utils'
+import { KPI_LABELS as L } from '@/lib/calculos'
 import { ChevronLeft, ChevronRight, RefreshCw, Pencil, Check, X } from 'lucide-react'
 
 type Consultor = {
@@ -249,7 +250,7 @@ function VendedoresInner() {
         {/* KPIs gerais */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">Receita Total</p>
+            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">{L.receitaTotal}</p>
             <p className="text-emerald-400 font-bold text-2xl">{loading ? '...' : formatCurrency(totalReceita)}</p>
             {!loading && metaTotal > 0 && (
               <div className="flex items-center justify-between mt-1">
@@ -261,7 +262,7 @@ function VendedoresInner() {
             )}
           </div>
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">Leads Totais</p>
+            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">{L.leads}</p>
             <p className="text-white font-bold text-2xl">{loadingLeads ? '...' : formatNumber(totalLeadsConsultores)}</p>
             <div className="flex items-center justify-between mt-1">
               <p className="text-zinc-500 text-xs">Hoje: {loadingLeads ? '...' : leadsHoje}</p>
@@ -273,7 +274,7 @@ function VendedoresInner() {
             </div>
           </div>
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">Taxa de Conversão</p>
+            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">{L.conversao}</p>
             <p className="text-white font-bold text-2xl">{loadingLeads ? '...' : `${taxaConversao.toFixed(1)}%`}</p>
             {!loadingLeads && avgMetaConversao > 0 && (
               <div className="flex items-center justify-between mt-1">
@@ -285,7 +286,7 @@ function VendedoresInner() {
             )}
           </div>
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">Ticket Médio</p>
+            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">{L.ticketMedio}</p>
             <p className="text-white font-bold text-2xl">{loading ? '...' : formatCurrency(ticketMedio)}</p>
             {!loading && avgMetaTicket > 0 && (
               <div className="flex items-center justify-between mt-1">
@@ -301,7 +302,7 @@ function VendedoresInner() {
         {/* KPIs secundários */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">Tráfego Total</p>
+            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider mb-2">{L.trafego}</p>
             <p className="text-orange-400 font-bold text-2xl">{loadingTrafego ? '...' : formatCurrency(totalSpend)}</p>
             {!loadingTrafego && trafegoGoogle > 0 && (
               <p className="text-zinc-500 text-xs mt-1">Meta: {formatCurrency(trafego)} · Google: {formatCurrency(trafegoGoogle)}</p>
@@ -333,94 +334,184 @@ function VendedoresInner() {
                 const expectedPct = getExpectedPct(mes)
                 const spend = getSpend(v.nome)
                 const cpl = spend > 0 && v.leads > 0 ? spend / v.leads : 0
+                const isEditando = editandoMeta === v.nome
+                // live preview enquanto edita
+                const previewMeta = isEditando ? (parseFloat(editMetaReceita) || 0) : meta
+                const previewMetaLeads = isEditando ? (parseInt(editMetaLeads) || 0) : meta_leads
+                const previewPctMeta = previewMeta > 0 ? Math.min((v.receita / previewMeta) * 100, 100) : 0
+                const previewPctLeads = previewMetaLeads > 0 ? Math.min((v.leads / previewMetaLeads) * 100, 100) : 0
                 return (
-                  <div key={v.nome} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}°`}</span>
-                        <h3 className="text-white font-semibold text-sm truncate">{v.nome}</h3>
+                  <div key={v.nome} className={`bg-zinc-900 border rounded-xl overflow-hidden ${i === 0 ? 'border-yellow-500/30' : 'border-zinc-800'}`}>
+
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-5 pt-5 pb-4">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-lg flex-shrink-0">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}°`}</span>
+                        <div className="min-w-0">
+                          <h3 className="text-white font-semibold text-sm truncate">{v.nome}</h3>
+                          <p className="text-zinc-500 text-xs">{pct.toFixed(1)}% da receita</p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-zinc-500">{pct.toFixed(1)}% da receita</span>
-                        {editandoMeta === v.nome ? (
-                          <div className="flex items-center gap-1">
-                            <input type="number" value={editMetaReceita} onChange={e => setEditMetaReceita(e.target.value)}
-                              className="w-20 bg-zinc-800 border border-zinc-600 text-white text-xs rounded px-2 py-1 focus:outline-none focus:border-emerald-500"
-                              placeholder="R$ meta" autoFocus />
-                            <input type="number" value={editMetaLeads} onChange={e => setEditMetaLeads(e.target.value)}
-                              className="w-16 bg-zinc-800 border border-zinc-600 text-white text-xs rounded px-2 py-1 focus:outline-none focus:border-purple-500"
-                              placeholder="leads" />
-                            <button onClick={() => salvarMeta(v.nome)} className="text-emerald-400 hover:text-emerald-300 p-1"><Check className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => setEditandoMeta(null)} className="text-zinc-500 hover:text-zinc-300 p-1"><X className="w-3.5 h-3.5" /></button>
-                          </div>
-                        ) : (
-                          <button onClick={() => { setEditandoMeta(v.nome); setEditMetaReceita(String(getMeta(v.nome).meta || '')); setEditMetaLeads(String(getMeta(v.nome).meta_leads || '')) }}
-                            className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
+                      <button
+                        onClick={() => {
+                          if (isEditando) { setEditandoMeta(null) }
+                          else { setEditandoMeta(v.nome); setEditMetaReceita(String(meta || '')); setEditMetaLeads(String(meta_leads || '')) }
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${isEditando ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
                     </div>
 
-                    {/* Barra de receita vs meta */}
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-zinc-500 text-xs">Receita</span>
-                        {meta > 0 && (
-                          <span className={`text-xs font-semibold ${pctMeta >= 100 ? 'text-emerald-400' : pctMeta >= expectedPct ? 'text-yellow-400' : 'text-zinc-400'}`}>
-                            {pctMeta.toFixed(0)}% da meta
-                          </span>
-                        )}
-                      </div>
-                      <ProgressBar
-                        value={v.receita}
-                        target={meta}
-                        expectedPct={expectedPct}
-                        colorClass={meta > 0 ? (pctMeta >= 100 ? 'bg-emerald-500' : pctMeta >= expectedPct ? 'bg-yellow-500' : 'bg-blue-500') : 'bg-emerald-500/70'}
-                      />
-                      {meta > 0 && (
-                        <div className="flex items-center justify-between mt-1">
-                          <p className="text-zinc-600 text-xs">{formatCurrency(v.receita)} / {formatCurrency(meta)}</p>
-                          {expectedPct > 0 && (
-                            <p className={`text-xs font-semibold ${(pctMeta / expectedPct) >= 1 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {((pctMeta / expectedPct) * 100).toFixed(0)}% do ritmo
-                            </p>
+                    {/* Painel de metas (lapiseira) */}
+                    {isEditando && (
+                      <div className="mx-5 mb-4 rounded-xl border border-zinc-700 bg-zinc-800/60 p-4 space-y-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Meta do mês</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => salvarMeta(v.nome)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-xs font-medium transition-colors">
+                              <Check className="w-3 h-3" /> Salvar
+                            </button>
+                            <button onClick={() => setEditandoMeta(null)} className="p-1.5 rounded-lg bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Meta de Receita */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-zinc-400 text-xs font-medium">Meta de Receita</span>
+                            {previewMeta > 0 && (
+                              <span className={`text-xs font-bold ${previewPctMeta >= 100 ? 'text-emerald-400' : previewPctMeta >= expectedPct ? 'text-yellow-400' : 'text-zinc-400'}`}>
+                                {previewPctMeta.toFixed(0)}% atingido
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-zinc-500 text-xs">Realizado:</span>
+                            <span className="text-emerald-400 font-semibold text-sm">{formatCurrency(v.receita)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-zinc-500 text-xs whitespace-nowrap">Meta (R$):</span>
+                            <input
+                              type="text" inputMode="decimal"
+                              value={editMetaReceita}
+                              onChange={e => setEditMetaReceita(e.target.value)}
+                              className="flex-1 bg-zinc-900 border border-zinc-600 text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 transition-colors"
+                              placeholder="Ex: 60000"
+                              autoFocus
+                            />
+                          </div>
+                          {previewMeta > 0 && (
+                            <div className="mt-2">
+                              <ProgressBar value={v.receita} target={previewMeta} expectedPct={expectedPct}
+                                colorClass={previewPctMeta >= 100 ? 'bg-emerald-500' : previewPctMeta >= expectedPct ? 'bg-yellow-500' : 'bg-blue-500'} />
+                              <div className="flex justify-between mt-0.5">
+                                <span className="text-zinc-600 text-[11px]">{formatCurrency(v.receita)} / {formatCurrency(previewMeta)}</span>
+                                {expectedPct > 0 && (
+                                  <span className={`text-[11px] font-semibold ${(previewPctMeta / expectedPct) >= 1 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {((previewPctMeta / expectedPct) * 100).toFixed(0)}% do ritmo
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           )}
                         </div>
-                      )}
-                    </div>
 
-                    {/* Barra de leads vs meta_leads */}
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-zinc-500 text-xs">Leads recebidos</span>
-                        {meta_leads > 0 && (
-                          <span className={`text-xs font-semibold ${pctLeads >= 100 ? 'text-emerald-400' : 'text-zinc-400'}`}>
-                            {pctLeads.toFixed(0)}% da meta
-                          </span>
+                        {/* Meta de Leads */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-zinc-400 text-xs font-medium">Meta de Leads</span>
+                            {previewMetaLeads > 0 && (
+                              <span className={`text-xs font-bold ${previewPctLeads >= 100 ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                                {previewPctLeads.toFixed(0)}% atingido
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-zinc-500 text-xs">Realizado:</span>
+                            <span className="text-violet-400 font-semibold text-sm">{v.leads} leads</span>
+                            <span className="text-zinc-600 text-xs">· hoje: {v.leadsHoje}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-zinc-500 text-xs whitespace-nowrap">Meta (leads):</span>
+                            <input
+                              type="text" inputMode="numeric"
+                              value={editMetaLeads}
+                              onChange={e => setEditMetaLeads(e.target.value)}
+                              className="flex-1 bg-zinc-900 border border-zinc-600 text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-violet-500 transition-colors"
+                              placeholder="Ex: 700"
+                            />
+                          </div>
+                          {previewMetaLeads > 0 && (
+                            <div className="mt-2">
+                              <ProgressBar value={v.leads} target={previewMetaLeads} expectedPct={expectedPct}
+                                colorClass={previewPctLeads >= 100 ? 'bg-emerald-500' : 'bg-violet-500'} />
+                              <span className="text-zinc-600 text-[11px]">{v.leads} / {previewMetaLeads} meta</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Barras de progresso normais */}
+                    <div className="px-5 pb-4 space-y-3">
+                      {/* Receita */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-zinc-500 text-xs">Receita</span>
+                          {meta > 0 && (
+                            <span className={`text-xs font-semibold ${pctMeta >= 100 ? 'text-emerald-400' : pctMeta >= expectedPct ? 'text-yellow-400' : 'text-zinc-400'}`}>
+                              {pctMeta.toFixed(0)}% da meta
+                            </span>
+                          )}
+                        </div>
+                        <ProgressBar
+                          value={v.receita} target={meta} expectedPct={expectedPct}
+                          colorClass={meta > 0 ? (pctMeta >= 100 ? 'bg-emerald-500' : pctMeta >= expectedPct ? 'bg-yellow-500' : 'bg-blue-500') : 'bg-emerald-500/70'}
+                        />
+                        {meta > 0 && (
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-zinc-600 text-xs">{formatCurrency(v.receita)} / {formatCurrency(meta)}</p>
+                            {expectedPct > 0 && (
+                              <p className={`text-xs font-semibold ${(pctMeta / expectedPct) >= 1 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {((pctMeta / expectedPct) * 100).toFixed(0)}% do ritmo
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <ProgressBar
-                        value={v.leads}
-                        target={meta_leads}
-                        expectedPct={expectedPct}
-                        colorClass={pctLeads >= 100 ? 'bg-emerald-500' : 'bg-purple-500'}
-                      />
-                      <div className="flex items-center justify-between mt-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-white font-semibold text-sm">{loadingLeads ? '...' : v.leads}</span>
-                          <span className="text-zinc-600 text-xs">{meta_leads > 0 ? `/ ${meta_leads} meta` : 'leads'}</span>
+
+                      {/* Leads */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-zinc-500 text-xs">Leads recebidos</span>
+                          {meta_leads > 0 && (
+                            <span className={`text-xs font-semibold ${pctLeads >= 100 ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                              {pctLeads.toFixed(0)}% da meta
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-zinc-500 text-xs">Hoje:</span>
-                          <span className={`text-sm font-semibold ${v.leadsHoje > 0 ? 'text-purple-400' : 'text-zinc-600'}`}>
-                            {loadingLeads ? '...' : v.leadsHoje}
-                          </span>
+                        <ProgressBar value={v.leads} target={meta_leads} expectedPct={expectedPct}
+                          colorClass={pctLeads >= 100 ? 'bg-emerald-500' : 'bg-violet-500'} />
+                        <div className="flex items-center justify-between mt-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-white font-semibold text-sm">{loadingLeads ? '...' : v.leads}</span>
+                            <span className="text-zinc-600 text-xs">{meta_leads > 0 ? `/ ${meta_leads} meta` : 'leads'}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-zinc-500 text-xs">Hoje:</span>
+                            <span className={`text-sm font-semibold ${v.leadsHoje > 0 ? 'text-violet-400' : 'text-zinc-600'}`}>
+                              {loadingLeads ? '...' : v.leadsHoje}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-zinc-800">
+                    {/* KPIs grid */}
+                    <div className="mx-5 mb-5 pt-3 border-t border-zinc-800 grid grid-cols-4 gap-2">
                       <div className="text-center">
                         <p className="text-zinc-500 text-xs">Receita</p>
                         <p className="text-emerald-400 font-bold text-sm mt-0.5">{formatCurrency(v.receita)}</p>
@@ -448,8 +539,9 @@ function VendedoresInner() {
                         )}
                       </div>
                     </div>
+
                     {spend > 0 && (
-                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-zinc-800">
+                      <div className="mx-5 mb-5 pt-3 border-t border-zinc-800 grid grid-cols-2 gap-2">
                         <div className="text-center">
                           <p className="text-zinc-500 text-xs">Tráfego</p>
                           <p className="text-orange-400 font-semibold text-sm mt-0.5">{formatCurrency(spend)}</p>

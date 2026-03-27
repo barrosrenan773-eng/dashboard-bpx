@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { formatCurrency } from '@/lib/utils'
+import { KPI_LABELS } from '@/lib/calculos'
 import { TrendingUp, TrendingDown, Minus, Maximize2, Minimize2, RefreshCw } from 'lucide-react'
 
 export default function TVPage() {
@@ -188,10 +189,10 @@ function TVContent() {
           {/* KPIs gerais */}
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: 'Receita Total', value: formatCurrency(totalRev), sub: `${pctTotal}% da meta`, color: txtColor(pctTotal, ritmo) },
-              { label: 'Meta Total', value: formatCurrency(totalMeta), sub: `esperado ${formatCurrency(totalMeta * ritmo / 100)}`, color: 'text-zinc-400' },
-              { label: 'Gasto em Tráfego', value: formatCurrency(totalSpend), sub: 'Meta Ads', color: 'text-orange-400' },
-              { label: 'ROAS Geral', value: roasTotal > 0 ? `${roasTotal.toFixed(1)}x` : '—', sub: 'receita ÷ mídia', color: roasTotal >= 3 ? 'text-emerald-400' : roasTotal >= 1.5 ? 'text-yellow-400' : 'text-red-400' },
+              { label: KPI_LABELS.receitaTotal, value: formatCurrency(totalRev), sub: `${pctTotal}% da meta`, color: txtColor(pctTotal, ritmo) },
+              { label: KPI_LABELS.metaTotal,   value: formatCurrency(totalMeta), sub: `esperado ${formatCurrency(totalMeta * ritmo / 100)}`, color: 'text-zinc-400' },
+              { label: KPI_LABELS.gastTrafego, value: formatCurrency(totalSpend), sub: 'Meta Ads', color: 'text-orange-400' },
+              { label: KPI_LABELS.roasGeral,   value: roasTotal > 0 ? `${roasTotal.toFixed(1)}x` : '—', sub: 'receita ÷ mídia', color: roasTotal >= 3 ? 'text-emerald-400' : roasTotal >= 1.5 ? 'text-yellow-400' : 'text-red-400' },
             ].map(k => (
               <div key={k.label} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
                 <p className="text-zinc-500 text-sm uppercase tracking-wider mb-3">{k.label}</p>

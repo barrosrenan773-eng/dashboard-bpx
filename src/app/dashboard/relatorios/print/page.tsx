@@ -2,6 +2,7 @@
 
 import { mockCanais, mockKPI, mockVendedores } from '@/lib/mock-data'
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
+import { KPI_LABELS } from '@/lib/calculos'
 
 const MES_REF = 'Março 2026'
 const canaisRelatorio = mockCanais.filter(c => c.canal !== 'Email' && c.canal !== 'Amazon' && c.canal !== 'Shopee')
@@ -113,13 +114,13 @@ export default function PrintPage() {
 
           <div className="kpi-grid">
             {[
-              { label: 'Receita Total', value: formatCurrency(mockKPI.receitaFeita), sub: `Objetivo: ${formatCurrency(mockKPI.objetivo)}`, color: '#10b981' },
-              { label: 'Investimento Total', value: formatCurrency(mockKPI.investimento), sub: 'Total investido no período', color: '#fff' },
-              { label: 'Lucro Bruto', value: formatCurrency(mockKPI.lucro), sub: `Margem: ${((mockKPI.lucro / mockKPI.receitaFeita) * 100).toFixed(1)}%`, color: '#10b981' },
-              { label: 'ROAS Geral', value: mockKPI.roas.toFixed(2), sub: 'Retorno sobre ad spend', color: mockKPI.roas >= 3 ? '#10b981' : '#ef4444' },
-              { label: 'Taxa de Conversão', value: formatPercent(mockKPI.conversao), sub: 'Leads → Vendas', color: mockKPI.conversao >= 3 ? '#10b981' : '#d4d4d8' },
-              { label: 'Ticket Médio', value: formatCurrency(mockKPI.ticket), sub: 'Por venda realizada', color: '#fff' },
-              { label: '% Receita em Ads', value: `${((mockKPI.investimento / mockKPI.receitaFeita) * 100).toFixed(1)}%`, sub: `${formatCurrency(mockKPI.investimento)} investido em anúncios`, color: (mockKPI.investimento / mockKPI.receitaFeita) <= 0.30 ? '#10b981' : '#eab308' },
+              { label: KPI_LABELS.receitaTotal,  value: formatCurrency(mockKPI.receitaFeita), sub: `Objetivo: ${formatCurrency(mockKPI.objetivo)}`, color: '#10b981' },
+              { label: KPI_LABELS.investimento,  value: formatCurrency(mockKPI.investimento), sub: 'Total investido no período', color: '#fff' },
+              { label: KPI_LABELS.lucro,          value: formatCurrency(mockKPI.lucro), sub: `Margem: ${((mockKPI.lucro / mockKPI.receitaFeita) * 100).toFixed(1)}%`, color: '#10b981' },
+              { label: KPI_LABELS.roasGeral,      value: mockKPI.roas.toFixed(2), sub: 'Retorno sobre ad spend', color: mockKPI.roas >= 3 ? '#10b981' : '#ef4444' },
+              { label: KPI_LABELS.conversao,      value: formatPercent(mockKPI.conversao), sub: 'Leads → Vendas', color: mockKPI.conversao >= 3 ? '#10b981' : '#d4d4d8' },
+              { label: KPI_LABELS.ticketMedio,    value: formatCurrency(mockKPI.ticket), sub: 'Por venda realizada', color: '#fff' },
+              { label: KPI_LABELS.pctReceitaAds,  value: `${((mockKPI.investimento / mockKPI.receitaFeita) * 100).toFixed(1)}%`, sub: `${formatCurrency(mockKPI.investimento)} investido em anúncios`, color: (mockKPI.investimento / mockKPI.receitaFeita) <= 0.30 ? '#10b981' : '#eab308' },
             ].map(item => (
               <div key={item.label} className="kpi-card">
                 <div className="kpi-label">{item.label}</div>

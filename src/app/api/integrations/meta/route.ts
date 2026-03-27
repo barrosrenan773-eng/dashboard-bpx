@@ -62,9 +62,9 @@ export async function GET(request: Request) {
   const startDate = searchParams.get('start') || ''
   const endDate = searchParams.get('end') || ''
 
-  const token = process.env.META_ACCESS_TOKEN
+  const token = process.env.META_ADS_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN
   if (!token) {
-    return NextResponse.json({ error: 'META_ACCESS_TOKEN não configurado' }, { status: 400 })
+    return NextResponse.json({ error: 'META_ADS_ACCESS_TOKEN não configurado' }, { status: 400 })
   }
 
   const accountIds = loja ? (LOJAS_ACCOUNTS[loja] || []) : Object.values(LOJAS_ACCOUNTS).flat()

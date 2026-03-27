@@ -3,7 +3,7 @@ import axios from 'axios'
 
 export const maxDuration = 30
 
-const VENDEDORES_ACCOUNT = '1405263997911642'
+const META_ACCOUNT = '451679706373080'
 const USD_BRL_FALLBACK = 5.80
 
 async function getUsdBrl(): Promise<number> {
@@ -21,61 +21,36 @@ export async function GET(request: Request) {
   const startDate = searchParams.get('start') || ''
   const endDate = searchParams.get('end') || ''
 
-  const token = process.env.META_ACCESS_TOKEN
-  if (!token) return NextResponse.json({ error: 'META_ACCESS_TOKEN não configurado' }, { status: 400 })
+  const token = process.env.META_ADS_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN
+  if (!token) return NextResponse.json({ error: 'META_ADS_ACCESS_TOKEN não configurado' }, { status: 400 })
 
   try {
     const usdBrl = await getUsdBrl()
 
-    // Busca insights por campanha da conta vendedores
+    // Busca spend total da conta via insights agregados
     const res = await axios.get(
-      `https://graph.facebook.com/v19.0/act_${VENDEDORES_ACCOUNT}/campaigns`,
+      `https://graph.facebook.com/v19.0/act_${META_ACCOUNT}/insights`,
       {
         params: {
           access_token: token,
-          fields: `name,insights.time_range({"since":"${startDate}","until":"${endDate}"}){spend}`,
-          limit: 100,
+          fields: 'spend,account_currency',
+          time_range: JSON.stringify({ since: startDate, until: endDate }),
+          level: 'account',
         },
       }
     )
 
-    const campaigns: any[] = res.data.data || []
-    const spendByVendedor: Record<string, number> = {}
+    const row = res.data.data?.[0]
+    const spendRaw = parseFloat(row?.spend || '0')
+    const currency = row?.account_currency || 'USD'
+    // Só converte se a conta estiver em USD; contas BRL já vêm no valor correto
+    const totalSpend = currency === 'BRL' ? spendRaw : spendRaw * usdBrl
 
-    for (const c of campaigns) {
-      const spend = parseFloat(c.insights?.data?.[0]?.spend || 0) * usdBrl
-      if (spend === 0) continue
-
-      // Extrai nomes entre colchetes ex: "[MACAPÁ] [ARTHUR] [DISFUNÇÃO]" → ["MACAPÁ","ARTHUR","DISFUNÇÃO"]
-      const tags = (c.name.match(/\[([^\]]+)\]/g) || []).map((t: string) => t.slice(1, -1).toUpperCase())
-
-      // Lista de primeiros nomes dos vendedores conhecidos
-      const VENDEDOR_TAGS: Record<string, string> = {
-        'GABRIELLY': 'Gabrielly Oliveira',
-        'AMANDA': 'Amanda Oliveira',
-        'TAYNARA': 'Taynara Silva',
-        'ARTHUR': 'Arthur BPX',
-        'ALINE': 'Aline  Rodrigues ',
-        'DANIELE': 'Daniele  santos ',
-        'MAIARA': 'Maiara damatta',
-        'JUNIOR': 'Junior  Silva',
-        'RAYANE': 'Rayane  damatta ',
-        'PAMELLA': 'Pamella BPX',
-        'ADRIANE': 'Adriane  Souza ',
-      }
-
-      for (const tag of tags) {
-        if (VENDEDOR_TAGS[tag]) {
-          const name = VENDEDOR_TAGS[tag]
-          spendByVendedor[name] = (spendByVendedor[name] || 0) + spend
-          break
-        }
-      }
-    }
-
-    const totalSpend = Object.values(spendByVendedor).reduce((s, v) => s + v, 0)
-    return NextResponse.json({ spendByVendedor, totalSpend, usdBrl })
+    // Retorna no mesmo formato esperado pelo frontend (spendByVendedor vazio = sem breakdown)
+    return NextResponse.json({ spendByVendedor: {}, totalSpend, usdBrl })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const detail = error.response?.data ?? error.message
+    console.error('[meta-vendedores]', detail)
+    return NextResponse.json({ error: error.message, detail }, { status: 500 })
   }
 }
