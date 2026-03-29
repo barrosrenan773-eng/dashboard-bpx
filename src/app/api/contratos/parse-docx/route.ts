@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
     let capital: number | null = null
     {
       // Tenta na versão compacta: "SALDO DEVEDOR" ... R$ valor
-      const reSaldo = /SALDO\s+DEVEDOR[^R]{0,200}?R\$\s*([\d]+(?:\.[\d]{3})*(?:,[\d]{1,2})?)/i
+      const reSaldo = /SALDO\s+DEVEDOR.{0,300}?R\$\s*([\d]+(?:\.[\d]{3})*(?:,[\d]{1,2})?)/i
       const mSaldo = compact.match(reSaldo)
       if (mSaldo) capital = parseBRL(mSaldo[1])
 
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
       for (const chave of chavesTaxa) {
         const re = new RegExp(
           chave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
-          '[^R]{0,200}?R\\$\\s*([\\d]+(?:\\.[\\d]{3})*(?:,[\\d]{1,2})?)',
+          '.{0,300}?R\\$\\s*([\\d]+(?:\\.[\\d]{3})*(?:,[\\d]{1,2})?)',
           'i'
         )
         const m = compact.match(re)
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
     // ── Total devedor (informativo) ──────────────────────────────────
     let total: number | null = null
     {
-      const reTotal = /TOTAL\s+DEVEDOR[^R]{0,200}?R\$\s*([\d]+(?:\.[\d]{3})*(?:,[\d]{1,2})?)/i
+      const reTotal = /TOTAL\s+DEVEDOR.{0,300}?R\$\s*([\d]+(?:\.[\d]{3})*(?:,[\d]{1,2})?)/i
       const mTotal = compact.match(reTotal)
       if (mTotal) total = parseBRL(mTotal[1])
     }

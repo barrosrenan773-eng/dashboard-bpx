@@ -280,7 +280,6 @@ export default function ContratosPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
               {[
                 { label: 'Cliente', value: preview.nome, color: 'text-white' },
-                { label: 'Serviço', value: preview.servico, color: 'text-zinc-300' },
                 { label: 'Capital (Saldo Devedor)', value: preview.capital != null ? formatCurrency(preview.capital) : null, color: 'text-blue-400' },
                 { label: 'Taxa (Serv. Financeiros)', value: preview.taxa != null ? formatCurrency(preview.taxa) : null, color: 'text-emerald-400' },
                 { label: 'Total Devedor', value: preview.total != null ? formatCurrency(preview.total) : null, color: 'text-zinc-300' },
@@ -295,6 +294,16 @@ export default function ContratosPage() {
                   )}
                 </div>
               ))}
+              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
+                <p className="text-zinc-500 text-xs mb-1">Serviço</p>
+                <select
+                  value={preview.servico}
+                  onChange={e => setPreview(p => p ? { ...p, servico: e.target.value } : p)}
+                  className="w-full bg-zinc-700 border border-zinc-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500"
+                >
+                  {SERVICOS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
             </div>
 
             {preview.naoEncontrados.length > 0 && (
