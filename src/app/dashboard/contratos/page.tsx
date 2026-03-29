@@ -14,6 +14,7 @@ type Contrato = {
   id: number
   nome: string
   servico: string
+  origem: string | null
   capital: number
   taxa: number
   status: 'aguardando' | 'pendente' | 'finalizado'
@@ -34,19 +35,21 @@ const STATUS_STYLE: Record<Contrato['status'], string> = {
 }
 
 const SERVICOS = [
-  'Empréstimo Consignado',
   'Compra de Dívida',
-  'Remuneração CCA1',
-  'Remuneração CCA2',
+  'Consignado',
+  'Remuneração Diferida',
 ] as const
 
-const EMPTY_FORM = { nome: '', servico: SERVICOS[0] as string, capital: '', taxa: '', status: 'aguardando' as Contrato['status'], data_finalizacao: '' }
+const ORIGENS = ['BPX', 'CCA1', 'CCA2'] as const
+
+const EMPTY_FORM = { nome: '', servico: SERVICOS[0] as string, origem: ORIGENS[0] as string, capital: '', taxa: '', status: 'aguardando' as Contrato['status'], data_finalizacao: '' }
 
 type DocxPreview = {
   nome: string
   capital: string
   taxa: string
   servico: string
+  origem: string
   data_finalizacao: string
   naoEncontrados: string[]
 }
@@ -107,9 +110,11 @@ export default function ContratosPage() {
     const body = {
       nome: form.nome,
       servico: form.servico,
+      origem: (form as typeof form & { origem: string }).origem || null,
       capital: parseFloat(form.capital) || 0,
       taxa: parseFloat(form.taxa) || 0,
       status: form.status,
+      data_finalizacao: (form as typeof form & { data_finalizacao: string }).data_finalizacao || null,
     }
     const res = editId
       ? await fetch('/api/contratos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editId, ...body }) })
@@ -130,7 +135,7 @@ export default function ContratosPage() {
   }
 
   function handleEdit(c: Contrato) {
-    setForm({ nome: c.nome, servico: c.servico, capital: String(c.capital), taxa: String(c.taxa), status: c.status })
+    setForm({ nome: c.nome, servico: c.servico, origem: c.origem ?? ORIGENS[0], capital: String(c.capital), taxa: String(c.taxa), status: c.status, data_finalizacao: c.data_finalizacao ?? '' })
     setEditId(c.id)
     setShowForm(true)
     setError('')
@@ -167,6 +172,7 @@ export default function ContratosPage() {
         capital: c.capital != null ? String(c.capital) : '',
         taxa: c.taxa != null ? String(c.taxa) : '',
         servico: c.servico ?? SERVICOS[0],
+        origem: ORIGENS[0],
         data_finalizacao: '',
         naoEncontrados: data.naoEncontrados ?? [],
       })
@@ -183,6 +189,7 @@ export default function ContratosPage() {
     const body = {
       nome: preview.nome,
       servico: preview.servico,
+      origem: preview.origem || null,
       capital: parseFloat(preview.capital) || 0,
       taxa: parseFloat(preview.taxa) || 0,
       status: 'aguardando' as Contrato['status'],
@@ -342,6 +349,17 @@ export default function ContratosPage() {
                   className="w-full bg-transparent text-zinc-300 text-sm font-semibold focus:outline-none"
                 />
               </div>
+              {/* Origem */}
+              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
+                <p className="text-zinc-500 text-xs mb-1">Origem</p>
+                <select
+                  value={preview.origem}
+                  onChange={e => setPreview(p => p ? { ...p, origem: e.target.value } : p)}
+                  className="w-full bg-transparent text-white text-sm font-semibold focus:outline-none"
+                >
+                  {ORIGENS.map(o => <option key={o} value={o} className="bg-zinc-800">{o}</option>)}
+                </select>
+              </div>
             </div>
 
             <div className="flex gap-3">
@@ -421,6 +439,25 @@ export default function ContratosPage() {
                   onChange={e => setForm(f => ({ ...f, taxa: e.target.value }))}
                   placeholder="0,00"
                   className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Origem</label>
+                <select
+                  value={(form as typeof form & { origem: string }).origem ?? ORIGENS[0]}
+                  onChange={e => setForm(f => ({ ...f, origem: e.target.value }))}
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                >
+                  {ORIGENS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Data de finalização</label>
+                <input
+                  type="date"
+                  value={(form as typeof form & { data_finalizacao: string }).data_finalizacao ?? ''}
+                  onChange={e => { const v = e.target.value; setTimeout(() => setForm(f => ({ ...f, data_finalizacao: v })), 0) }}
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
               <div className="md:col-span-2">
