@@ -191,6 +191,7 @@ export default function ContratosPage() {
 
   const totalCapital = contratos.reduce((s, c) => s + c.capital, 0)
   const totalTaxas = contratos.reduce((s, c) => s + c.taxa, 0)
+  const totalGeral = totalCapital + totalTaxas
   const totalFinalizados = contratos.filter(c => c.status === 'finalizado').length
   const emAndamento = contratos.filter(c => c.status !== 'finalizado').length
 
@@ -212,9 +213,9 @@ export default function ContratosPage() {
             bgClass="bg-zinc-700/30"
           />
           <KpiCard
-            label="Capital Total"
-            value={formatCurrency(totalCapital)}
-            sub="capital empregado"
+            label="Saldo Total"
+            value={formatCurrency(totalGeral)}
+            sub={`Capital ${formatCurrency(totalCapital)} + Serv. ${formatCurrency(totalTaxas)}`}
             icon={Briefcase}
             color="#3B82F6"
             colorClass="text-blue-400"
