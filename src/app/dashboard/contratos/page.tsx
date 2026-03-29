@@ -39,7 +39,6 @@ type DocxPreview = {
   capital: number | null
   taxa: number | null
   total: number | null
-  troco: number | null
   vencimento: string | null
   servico: string
   naoEncontrados: string[]
@@ -272,7 +271,6 @@ export default function ContratosPage() {
                 { label: 'Capital (Saldo Devedor)', value: preview.capital != null ? formatCurrency(preview.capital) : null, color: 'text-blue-400' },
                 { label: 'Taxa (Serv. Financeiros)', value: preview.taxa != null ? formatCurrency(preview.taxa) : null, color: 'text-emerald-400' },
                 { label: 'Total Devedor', value: preview.total != null ? formatCurrency(preview.total) : null, color: 'text-zinc-300' },
-                { label: 'Troco', value: preview.troco != null ? formatCurrency(preview.troco) : null, color: 'text-zinc-300' },
                 { label: 'Vencimento', value: preview.vencimento ? new Date(preview.vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : null, color: 'text-zinc-300' },
               ].map(f => (
                 <div key={f.label} className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
