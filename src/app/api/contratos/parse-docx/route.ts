@@ -189,12 +189,10 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Tipo de serviço ──────────────────────────────────────────────
-    let servico = 'Crédito Consignado'
-    if (/PORTABILIDADE/i.test(compact)) servico = 'Portabilidade'
-    else if (/REFINANCIAMENTO/i.test(compact)) servico = 'Refinanciamento'
-    else if (/EMPRÉSTIMO|EMPRESTIMO/i.test(compact)) servico = 'Empréstimo Consignado'
-    else if (/FGTS/i.test(compact)) servico = 'FGTS'
-    else if (/CARTÃO|CARTAO/i.test(compact)) servico = 'Cartão Consignado'
+    let servico = 'Empréstimo Consignado'
+    if (/COMPRA\s+DE\s+D[IÍ]VIDA/i.test(compact)) servico = 'Compra de Dívida'
+    else if (/REMUNER[AÀ][CÇ][AÃ]O\s+CCA\s*2/i.test(compact)) servico = 'Remuneração CCA2'
+    else if (/REMUNER[AÀ][CÇ][AÃ]O\s+CCA\s*1/i.test(compact)) servico = 'Remuneração CCA1'
 
     const campos = { nome, capital, taxa, total, vencimento, servico }
 

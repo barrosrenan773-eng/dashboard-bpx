@@ -32,7 +32,14 @@ const STATUS_STYLE: Record<Contrato['status'], string> = {
   finalizado: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
 }
 
-const EMPTY_FORM = { nome: '', servico: '', capital: '', taxa: '', status: 'aguardando' as Contrato['status'] }
+const SERVICOS = [
+  'Empréstimo Consignado',
+  'Compra de Dívida',
+  'Remuneração CCA1',
+  'Remuneração CCA2',
+] as const
+
+const EMPTY_FORM = { nome: '', servico: SERVICOS[0] as string, capital: '', taxa: '', status: 'aguardando' as Contrato['status'] }
 
 type DocxPreview = {
   nome: string | null
@@ -66,6 +73,7 @@ function KpiCard({
 
 export default function ContratosPage() {
   const [contratos, setContratos] = useState<Contrato[]>([])
+  const [filtroServico, setFiltroServico] = useState<string>('todos')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -176,6 +184,10 @@ export default function ContratosPage() {
     setShowForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  const contratosFiltrados = filtroServico === 'todos'
+    ? contratos
+    : contratos.filter(c => c.servico === filtroServico)
 
   const totalCapital = contratos.reduce((s, c) => s + c.capital, 0)
   const totalTaxas = contratos.reduce((s, c) => s + c.taxa, 0)
@@ -344,12 +356,13 @@ export default function ContratosPage() {
               </div>
               <div>
                 <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Tipo de serviço</label>
-                <input
+                <select
                   value={form.servico}
                   onChange={e => setForm(f => ({ ...f, servico: e.target.value }))}
-                  placeholder="Ex: Portabilidade, Refinanciamento..."
-                  className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-                />
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                >
+                  {SERVICOS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
               <div>
                 <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Capital (R$)</label>
@@ -409,13 +422,31 @@ export default function ContratosPage() {
           </div>
         )}
 
+        {/* ── FILTROS ── */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-zinc-500 text-xs font-medium uppercase tracking-wider mr-1">Filtrar:</span>
+          {(['todos', ...SERVICOS] as string[]).map(s => (
+            <button
+              key={s}
+              onClick={() => setFiltroServico(s)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                filtroServico === s
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40'
+                  : 'bg-zinc-800/50 text-zinc-400 border-zinc-700 hover:border-zinc-500 hover:text-zinc-200'
+              }`}
+            >
+              {s === 'todos' ? 'Todos' : s}
+            </button>
+          ))}
+        </div>
+
         {/* ── TABELA ── */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
             <div>
               <h3 className="text-white font-semibold text-sm">Lista de Contratos</h3>
               {!loading && (
-                <p className="text-zinc-500 text-xs mt-0.5">{contratos.length} registro{contratos.length !== 1 ? 's' : ''}</p>
+                <p className="text-zinc-500 text-xs mt-0.5">{contratosFiltrados.length} registro{contratosFiltrados.length !== 1 ? 's' : ''}{filtroServico !== 'todos' ? ` · ${filtroServico}` : ''}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -439,11 +470,11 @@ export default function ContratosPage() {
 
           {loading ? (
             <div className="p-10 text-center text-zinc-500 text-sm animate-pulse">Carregando...</div>
-          ) : contratos.length === 0 ? (
+          ) : contratosFiltrados.length === 0 ? (
             <div className="p-10 text-center">
               <FileText className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
-              <p className="text-zinc-500 text-sm">Nenhum contrato cadastrado</p>
-              <p className="text-zinc-600 text-xs mt-1">Clique em "Novo Contrato" para começar</p>
+              <p className="text-zinc-500 text-sm">{filtroServico === 'todos' ? 'Nenhum contrato cadastrado' : `Nenhum contrato de "${filtroServico}"`}</p>
+              {filtroServico === 'todos' && <p className="text-zinc-600 text-xs mt-1">Clique em "Novo Contrato" para começar</p>}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -460,7 +491,7 @@ export default function ContratosPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
-                  {contratos.map(c => (
+                  {contratosFiltrados.map(c => (
                     <tr key={c.id} className="hover:bg-zinc-800/40 transition-colors group">
                       <td className="py-4 px-5">
                         <span className="text-white font-medium text-sm">{c.nome}</span>
