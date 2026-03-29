@@ -17,6 +17,7 @@ type Contrato = {
   capital: number
   taxa: number
   status: 'aguardando' | 'pendente' | 'finalizado'
+  data_finalizacao: string | null
   created_at: string
 }
 
@@ -39,15 +40,14 @@ const SERVICOS = [
   'Remuneração CCA2',
 ] as const
 
-const EMPTY_FORM = { nome: '', servico: SERVICOS[0] as string, capital: '', taxa: '', status: 'aguardando' as Contrato['status'] }
+const EMPTY_FORM = { nome: '', servico: SERVICOS[0] as string, capital: '', taxa: '', status: 'aguardando' as Contrato['status'], data_finalizacao: '' }
 
 type DocxPreview = {
-  nome: string | null
-  capital: number | null
-  taxa: number | null
-  total: number | null
-  vencimento: string | null
+  nome: string
+  capital: string
+  taxa: string
   servico: string
+  data_finalizacao: string
   naoEncontrados: string[]
 }
 
@@ -161,7 +161,15 @@ export default function ContratosPage() {
       const res = await fetch('/api/contratos/parse-docx', { method: 'POST', body: fd })
       const data = await res.json()
       if (data.error) { setUploadError(data.error); setUploading(false); return }
-      setPreview(data.campos ? { ...data.campos, naoEncontrados: data.naoEncontrados ?? [] } : null)
+      const c = data.campos ?? {}
+      setPreview({
+        nome: c.nome ?? '',
+        capital: c.capital != null ? String(c.capital) : '',
+        taxa: c.taxa != null ? String(c.taxa) : '',
+        servico: c.servico ?? SERVICOS[0],
+        data_finalizacao: '',
+        naoEncontrados: data.naoEncontrados ?? [],
+      })
     } catch (err) {
       setUploadError(String(err))
     }
@@ -169,20 +177,23 @@ export default function ContratosPage() {
     e.target.value = ''
   }
 
-  function handleConfirmarImport() {
+  async function handleConfirmarImport() {
     if (!preview) return
-    setForm({
-      nome: preview.nome ?? '',
-      servico: preview.servico ?? '',
-      capital: preview.capital != null ? String(preview.capital) : '',
-      taxa: preview.taxa != null ? String(preview.taxa) : '',
-      status: 'aguardando',
-    })
+    setSaving(true)
+    const body = {
+      nome: preview.nome,
+      servico: preview.servico,
+      capital: parseFloat(preview.capital) || 0,
+      taxa: parseFloat(preview.taxa) || 0,
+      status: 'aguardando' as Contrato['status'],
+      data_finalizacao: preview.data_finalizacao || null,
+    }
+    const res = await fetch('/api/contratos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const data = await res.json()
+    setSaving(false)
+    if (data.error) { setUploadError(data.error); return }
     setPreview(null)
-    setEditId(null)
-    setError('')
-    setShowForm(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    load()
   }
 
   const contratosFiltrados = filtroServico === 'todos'
@@ -268,8 +279,8 @@ export default function ContratosPage() {
                   <FileText className="w-4 h-4 text-emerald-400" />
                 </div>
                 <div>
-                  <h4 className="text-white font-semibold text-sm">Contrato lido com sucesso</h4>
-                  <p className="text-zinc-500 text-xs">Confira os dados antes de salvar</p>
+                  <h4 className="text-white font-semibold text-sm">Contrato lido — ajuste e confirme</h4>
+                  <p className="text-zinc-500 text-xs">Edite os campos abaixo e clique em Confirmar para salvar</p>
                 </div>
               </div>
               <button onClick={() => setPreview(null)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
@@ -277,52 +288,70 @@ export default function ContratosPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-              {[
-                { label: 'Cliente', value: preview.nome, color: 'text-white' },
-                { label: 'Capital (Saldo Devedor)', value: preview.capital != null ? formatCurrency(preview.capital) : null, color: 'text-blue-400' },
-                { label: 'Taxa (Serv. Financeiros)', value: preview.taxa != null ? formatCurrency(preview.taxa) : null, color: 'text-emerald-400' },
-                { label: 'Total Devedor', value: preview.total != null ? formatCurrency(preview.total) : null, color: 'text-zinc-300' },
-                { label: 'Vencimento', value: preview.vencimento ? new Date(preview.vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : null, color: 'text-zinc-300' },
-              ].map(f => (
-                <div key={f.label} className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
-                  <p className="text-zinc-500 text-xs mb-0.5">{f.label}</p>
-                  {f.value ? (
-                    <p className={`text-sm font-semibold ${f.color}`}>{f.value}</p>
-                  ) : (
-                    <p className="text-zinc-600 text-xs italic">Não encontrado</p>
-                  )}
-                </div>
-              ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              {/* Nome */}
+              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
+                <p className="text-zinc-500 text-xs mb-1">Nome do cliente</p>
+                <input
+                  value={preview.nome}
+                  onChange={e => setPreview(p => p ? { ...p, nome: e.target.value } : p)}
+                  className="w-full bg-transparent text-white text-sm font-semibold focus:outline-none placeholder:text-zinc-600"
+                  placeholder="Nome completo"
+                />
+              </div>
+              {/* Serviço */}
               <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
                 <p className="text-zinc-500 text-xs mb-1">Serviço</p>
                 <select
                   value={preview.servico}
                   onChange={e => setPreview(p => p ? { ...p, servico: e.target.value } : p)}
-                  className="w-full bg-zinc-700 border border-zinc-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-transparent text-white text-sm font-semibold focus:outline-none"
                 >
-                  {SERVICOS.map(s => <option key={s} value={s}>{s}</option>)}
+                  {SERVICOS.map(s => <option key={s} value={s} className="bg-zinc-800">{s}</option>)}
                 </select>
               </div>
-            </div>
-
-            {preview.naoEncontrados.length > 0 && (
-              <div className="flex items-start gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2.5 mb-4">
-                <AlertCircle className="w-3.5 h-3.5 text-yellow-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-yellow-300 text-xs font-medium">Campos não identificados automaticamente:</p>
-                  <p className="text-yellow-400/70 text-xs mt-0.5">{preview.naoEncontrados.join(', ')} — você poderá preencher manualmente.</p>
-                </div>
+              {/* Capital */}
+              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
+                <p className="text-zinc-500 text-xs mb-1">Capital — Saldo Devedor (R$)</p>
+                <input
+                  type="number"
+                  value={preview.capital}
+                  onChange={e => setPreview(p => p ? { ...p, capital: e.target.value } : p)}
+                  className="w-full bg-transparent text-blue-400 text-sm font-semibold focus:outline-none placeholder:text-zinc-600"
+                  placeholder="0.00"
+                />
               </div>
-            )}
+              {/* Taxa */}
+              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
+                <p className="text-zinc-500 text-xs mb-1">Taxa — Serviços Financeiros (R$)</p>
+                <input
+                  type="number"
+                  value={preview.taxa}
+                  onChange={e => setPreview(p => p ? { ...p, taxa: e.target.value } : p)}
+                  className="w-full bg-transparent text-emerald-400 text-sm font-semibold focus:outline-none placeholder:text-zinc-600"
+                  placeholder="0.00"
+                />
+              </div>
+              {/* Data de finalização */}
+              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
+                <p className="text-zinc-500 text-xs mb-1">Data de finalização</p>
+                <input
+                  type="date"
+                  value={preview.data_finalizacao}
+                  onChange={e => { const v = e.target.value; setTimeout(() => setPreview(p => p ? { ...p, data_finalizacao: v } : p), 0) }}
+                  className="w-full bg-transparent text-zinc-300 text-sm font-semibold focus:outline-none"
+                />
+              </div>
+            </div>
 
             <div className="flex gap-3">
               <button
                 onClick={handleConfirmarImport}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
+                disabled={saving}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
               >
                 <Check className="w-4 h-4" />
-                Confirmar e editar
+                {saving ? 'Salvando...' : 'Confirmar'}
               </button>
               <button
                 onClick={() => setPreview(null)}
