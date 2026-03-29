@@ -345,7 +345,7 @@ export default function ContratosPage() {
                 <input
                   type="date"
                   value={preview.data_finalizacao}
-                  onChange={e => { const v = e.target.value; setTimeout(() => setPreview(p => p ? { ...p, data_finalizacao: v } : p), 0) }}
+                  onChange={e => setPreview(p => p ? { ...p, data_finalizacao: e.target.value } : p)}
                   className="w-full bg-transparent text-zinc-300 text-sm font-semibold focus:outline-none"
                 />
               </div>
@@ -456,7 +456,7 @@ export default function ContratosPage() {
                 <input
                   type="date"
                   value={(form as typeof form & { data_finalizacao: string }).data_finalizacao ?? ''}
-                  onChange={e => { const v = e.target.value; setTimeout(() => setForm(f => ({ ...f, data_finalizacao: v })), 0) }}
+                  onChange={e => setForm(f => ({ ...f, data_finalizacao: e.target.value }))}
                   className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
