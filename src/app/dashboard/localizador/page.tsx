@@ -448,7 +448,7 @@ export default function LoczalizadorPage() {
       setLoading(true)
       const { data, error } = await supabase
         .from('localizador_servidores')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('orgao', { ascending: true })
         .order('nome', { ascending: true })
         .range(0, 9999)
