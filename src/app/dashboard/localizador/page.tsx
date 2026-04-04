@@ -194,7 +194,7 @@ function LinhaServidor({ s, onToggleContato }: { s: Servidor; onToggleContato: (
 // ─── Grupo por órgão ─────────────────────────────────────────────────────────
 
 function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; servidores: Servidor[]; onToggleContato: (id: string, valor: boolean) => void }) {
-  const [aberto, setAberto] = useState(true)
+  const [aberto, setAberto] = useState(false)
   const comMargem = servidores.filter(s => s.margem_disponivel && s.status_consulta === 'ok')
   const contatados = servidores.filter(s => s.contatado)
 
