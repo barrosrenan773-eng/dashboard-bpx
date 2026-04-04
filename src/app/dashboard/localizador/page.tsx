@@ -208,16 +208,6 @@ function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; ser
           <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span className="text-white font-semibold text-sm">{orgao}</span>
           <span className="text-zinc-500 text-xs">{servidores.length} servidor{servidores.length !== 1 ? 'es' : ''}</span>
-          {comMargem.length > 0 && (
-            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-xs">
-              {comMargem.length} com margem
-            </span>
-          )}
-          {contatados.length > 0 && (
-            <span className="bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full text-xs">
-              {contatados.length} contatado{contatados.length !== 1 ? 's' : ''}
-            </span>
-          )}
         </div>
         {aberto
           ? <ChevronDown className="w-4 h-4 text-zinc-500" />
