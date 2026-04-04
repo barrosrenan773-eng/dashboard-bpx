@@ -426,6 +426,7 @@ export default function LoczalizadorPage() {
   const [servidores, setServidores] = useState<Servidor[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
+  const [filtroOrgaoGrafico, setFiltroOrgaoGrafico] = useState<string>('todos')
   const [filtroMargem, setFiltroMargem] = useState<'todos' | 'com_margem' | 'sem_margem' | 'negativado'>('todos')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ok' | 'erro_cc'>('todos')
   const [filtroContato, setFiltroContato] = useState<'todos' | 'contatado' | 'pendente'>('todos')
@@ -580,10 +581,12 @@ export default function LoczalizadorPage() {
 
         {/* Gráfico de pizza — distribuição de margem */}
         {!loading && servidores.length > 0 && (() => {
-          const comMargem  = servidores.filter(s => classifMargem(s) === 'com_margem').length
-          const semMargem  = servidores.filter(s => classifMargem(s) === 'sem_margem').length
-          const negativado = servidores.filter(s => classifMargem(s) === 'negativado').length
-          const total = servidores.length
+          const orgaos = ['todos', ...Array.from(new Set(servidores.map(s => s.orgao))).sort()]
+          const base = filtroOrgaoGrafico === 'todos' ? servidores : servidores.filter(s => s.orgao === filtroOrgaoGrafico)
+          const comMargem  = base.filter(s => classifMargem(s) === 'com_margem').length
+          const semMargem  = base.filter(s => classifMargem(s) === 'sem_margem').length
+          const negativado = base.filter(s => classifMargem(s) === 'negativado').length
+          const total = base.length
           const pieData = [
             { name: 'Com margem',  value: comMargem,  color: '#10b981' },
             { name: 'Sem margem',  value: semMargem,  color: '#71717a' },
@@ -591,7 +594,20 @@ export default function LoczalizadorPage() {
           ].filter(d => d.value > 0)
           return (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-              <p className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-4">Distribuição de Margem — {total} servidores</p>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-zinc-400 text-xs font-medium uppercase tracking-wider">Distribuição de Margem — {total} servidores</p>
+                <div className="flex items-center gap-1 bg-zinc-800 rounded-lg p-1 flex-wrap max-w-md justify-end">
+                  {orgaos.map(o => (
+                    <button
+                      key={o}
+                      onClick={() => setFiltroOrgaoGrafico(o)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${filtroOrgaoGrafico === o ? 'bg-emerald-600 text-white shadow' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                    >
+                      {o === 'todos' ? 'Todos' : o.split(' ').slice(0, 3).join(' ')}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="flex items-center gap-6">
                 <div className="w-48 h-48 shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
