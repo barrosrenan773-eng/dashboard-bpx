@@ -195,8 +195,19 @@ function LinhaServidor({ s, onToggleContato }: { s: Servidor; onToggleContato: (
 
 function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; servidores: Servidor[]; onToggleContato: (id: string, valor: boolean) => void }) {
   const [aberto, setAberto] = useState(false)
-  const comMargem = servidores.filter(s => s.margem_disponivel && s.status_consulta === 'ok')
-  const contatados = servidores.filter(s => s.contatado)
+  const [busca, setBusca] = useState('')
+  const [filtroMargem, setFiltroMargem] = useState<'todos' | 'com_margem' | 'sem_margem' | 'negativado'>('todos')
+  const [filtroContato, setFiltroContato] = useState<'todos' | 'contatado' | 'pendente'>('todos')
+
+  const filtrados = servidores.filter(s => {
+    const termo = busca.toLowerCase()
+    const matchBusca = !busca || s.nome.toLowerCase().includes(termo) || s.cpf.includes(termo)
+    const val = s.margem_disponivel ? parseFloat(s.margem_disponivel.replace(/[^0-9,.\-]/g, '').replace(',', '.')) : NaN
+    const classMargem = isNaN(val) ? 'sem_margem' : val > 0 ? 'com_margem' : val < 0 ? 'negativado' : 'sem_margem'
+    const matchMargem = filtroMargem === 'todos' || classMargem === filtroMargem
+    const matchContato = filtroContato === 'todos' || (filtroContato === 'contatado' ? s.contatado : !s.contatado)
+    return matchBusca && matchMargem && matchContato
+  })
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
@@ -216,24 +227,65 @@ function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; ser
       </button>
 
       {aberto && (
-        <div className="overflow-x-auto border-t border-zinc-800">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
-                <th className="text-left px-5 py-3 font-medium">Nome / CPF</th>
-                <th className="text-left px-5 py-3 font-medium">Órgão</th>
-                <th className="text-left px-5 py-3 font-medium">Cidade</th>
-                <th className="text-left px-5 py-3 font-medium">Telefones</th>
-                <th className="text-left px-5 py-3 font-medium">Margem Disp.</th>
-                <th className="text-left px-5 py-3 font-medium">Contato</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800">
-              {servidores.map(s => (
-                <LinhaServidor key={s.id} s={s} onToggleContato={onToggleContato} />
+        <div className="border-t border-zinc-800">
+          {/* Filtros internos */}
+          <div className="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-zinc-800/60 bg-zinc-800/20">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Buscar por nome ou CPF..."
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
+            <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+              {([
+                { key: 'todos', label: 'Todos' },
+                { key: 'com_margem', label: 'Com margem', cls: 'bg-emerald-600' },
+                { key: 'sem_margem', label: 'Sem margem', cls: 'bg-zinc-600' },
+                { key: 'negativado', label: 'Negativado', cls: 'bg-red-600' },
+              ] as const).map(op => (
+                <button key={op.key} onClick={() => setFiltroMargem(op.key)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${filtroMargem === op.key ? `${op.cls ?? 'bg-zinc-600'} text-white` : 'text-zinc-400 hover:text-white'}`}>
+                  {op.label}
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+            <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
+              {([
+                { key: 'todos', label: 'Todos' },
+                { key: 'pendente', label: 'Pendentes', cls: 'bg-amber-600' },
+                { key: 'contatado', label: 'Contatados', cls: 'bg-violet-600' },
+              ] as const).map(op => (
+                <button key={op.key} onClick={() => setFiltroContato(op.key)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${filtroContato === op.key ? `${op.cls ?? 'bg-zinc-600'} text-white` : 'text-zinc-400 hover:text-white'}`}>
+                  {op.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-zinc-500 text-xs ml-auto">{filtrados.length} resultado{filtrados.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                  <th className="text-left px-5 py-3 font-medium">Nome / CPF</th>
+                  <th className="text-left px-5 py-3 font-medium">Cidade</th>
+                  <th className="text-left px-5 py-3 font-medium">Telefones</th>
+                  <th className="text-left px-5 py-3 font-medium">Margem Disp.</th>
+                  <th className="text-left px-5 py-3 font-medium">Contato</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {filtrados.map(s => (
+                  <LinhaServidor key={s.id} s={s} onToggleContato={onToggleContato} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -668,79 +720,6 @@ export default function LoczalizadorPage() {
           )}
         </div>
 
-        {/* Filtros */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
-          {/* Busca */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input
-              type="text"
-              placeholder="Buscar por nome, CPF ou órgão..."
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              className="w-full bg-zinc-800/60 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-4 items-center">
-            {/* Filtro de margem */}
-            <div className="flex flex-col gap-1">
-              <p className="text-zinc-500 text-[10px] uppercase tracking-wider font-medium">Margem</p>
-              <div className="flex items-center gap-1 bg-zinc-800/60 border border-zinc-700 rounded-lg p-1">
-                {([
-                  { key: 'todos',      label: 'Todos' },
-                  { key: 'com_margem', label: 'Com margem', activeClass: 'bg-emerald-600' },
-                  { key: 'sem_margem', label: 'Sem margem', activeClass: 'bg-zinc-600' },
-                  { key: 'negativado', label: 'Negativado',  activeClass: 'bg-red-600' },
-                ] as const).map(op => (
-                  <button
-                    key={op.key}
-                    onClick={() => setFiltroMargem(op.key)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                      filtroMargem === op.key
-                        ? `${op.activeClass ?? 'bg-zinc-600'} text-white shadow`
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
-                    }`}
-                  >
-                    {op.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Divisor */}
-            <div className="w-px h-8 bg-zinc-700 hidden sm:block" />
-
-            {/* Filtro de contato */}
-            <div className="flex flex-col gap-1">
-              <p className="text-zinc-500 text-[10px] uppercase tracking-wider font-medium">Contato</p>
-              <div className="flex items-center gap-1 bg-zinc-800/60 border border-zinc-700 rounded-lg p-1">
-                {([
-                  { key: 'todos',     label: 'Todos' },
-                  { key: 'pendente',  label: 'Pendentes',  activeClass: 'bg-amber-600' },
-                  { key: 'contatado', label: 'Contatados', activeClass: 'bg-violet-600' },
-                ] as const).map(op => (
-                  <button
-                    key={op.key}
-                    onClick={() => setFiltroContato(op.key)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                      filtroContato === op.key
-                        ? `${op.activeClass ?? 'bg-zinc-600'} text-white shadow`
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
-                    }`}
-                  >
-                    {op.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-
-            <p className="text-zinc-500 text-xs ml-auto">
-              {filtrados.length} servidor{filtrados.length !== 1 ? 'es' : ''}
-            </p>
-          </div>
-        </div>
 
         {/* Conteúdo */}
         {loading ? (
