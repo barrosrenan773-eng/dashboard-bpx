@@ -528,15 +528,15 @@ export default function LoczalizadorPage() {
   const totalPaginas = Math.ceil(filtrados.length / POR_PAGINA)
   const filtradosPagina = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)
 
-  // Agrupa por órgão (só da página atual)
+  // Agrupa por órgão em TODOS os filtrados (não só da página atual)
   const porOrgao = useMemo(() => {
     const mapa: Record<string, Servidor[]> = {}
-    filtradosPagina.forEach(s => {
+    filtrados.forEach(s => {
       if (!mapa[s.orgao]) mapa[s.orgao] = []
       mapa[s.orgao].push(s)
     })
     return Object.entries(mapa).sort(([a], [b]) => a.localeCompare(b))
-  }, [filtradosPagina])
+  }, [filtrados])
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950">
