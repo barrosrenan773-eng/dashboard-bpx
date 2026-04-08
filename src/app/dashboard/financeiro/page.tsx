@@ -753,10 +753,188 @@ function KpiCard({
   )
 }
 
+// ─── Fluxo de Caixa Modal ────────────────────────────────────────────────────
+
+function FluxoCaixaModal({ mes, onClose }: { mes: string; onClose: () => void }) {
+  const [mesSel, setMesSel] = useState(mes)
+  const [dias, setDias] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [savingDia, setSavingDia] = useState<string | null>(null)
+  const [editValues, setEditValues] = useState<Record<string, { saldo_real: string; saldo_inicial: string; observacao: string }>>({})
+  const [expandedDia, setExpandedDia] = useState<string | null>(null)
+
+  function fmt(v: number) {
+    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  }
+  function getMesStr(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }
+  function navMes(delta: number) {
+    const [y, m] = mesSel.split('-').map(Number)
+    setMesSel(getMesStr(new Date(y, m - 1 + delta, 1)))
+  }
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      fetch('/api/historico-conciliacoes').then(r => r.json()),
+      fetch(`/api/fluxo-caixa?mes=${mesSel}`).then(r => r.json()),
+    ]).then(([historico, saldos]) => {
+      const saldoMap: Record<string, any> = {}
+      if (Array.isArray(saldos)) for (const s of saldos) saldoMap[s.data] = s
+
+      const movPorDia: Record<string, any[]> = {}
+      if (Array.isArray(historico)) {
+        for (const h of historico) {
+          const detalhes: any[] = Array.isArray(h.detalhes) ? h.detalhes : []
+          for (const d of detalhes) {
+            const data: string = d.data || h.created_at?.slice(0, 10) || ''
+            if (!data || !data.startsWith(mesSel)) continue
+            if (!movPorDia[data]) movPorDia[data] = []
+            movPorDia[data].push({ tipo: d.tipo === 'CREDIT' ? 'CREDIT' : 'DEBIT', valor: Math.abs(parseFloat(d.valor) || 0), descricao: d.descricao || '', categoria: d.categoria || '' })
+          }
+        }
+      }
+
+      const [y, m] = mesSel.split('-').map(Number)
+      const ultimoDia = new Date(y, m, 0).getDate()
+      let saldoAcumulado = 0
+      let saldoInicialEncontrado = false
+      const allDias: any[] = []
+
+      for (let d = 1; d <= ultimoDia; d++) {
+        const dataStr = `${mesSel}-${String(d).padStart(2, '0')}`
+        const saldoDb = saldoMap[dataStr]
+        const movs = movPorDia[dataStr] || []
+        const entradas = movs.filter((m: any) => m.tipo === 'CREDIT').reduce((s: number, m: any) => s + m.valor, 0)
+        const saidas = movs.filter((m: any) => m.tipo === 'DEBIT').reduce((s: number, m: any) => s + m.valor, 0)
+        if (saldoDb?.saldo_inicial != null && !saldoInicialEncontrado) { saldoAcumulado = parseFloat(saldoDb.saldo_inicial) || 0; saldoInicialEncontrado = true }
+        saldoAcumulado = saldoAcumulado + entradas - saidas
+        const saldoReal = saldoDb?.saldo_real != null ? parseFloat(saldoDb.saldo_real) : null
+        allDias.push({ data: dataStr, entradas, saidas, movimentos: movs, saldo_calculado: saldoAcumulado, saldo_real: saldoReal, saldo_inicial: saldoDb?.saldo_inicial != null ? parseFloat(saldoDb.saldo_inicial) : null, observacao: saldoDb?.observacao || '', divergente: saldoReal !== null && Math.abs(saldoAcumulado - saldoReal) > 0.01 })
+      }
+
+      setDias(allDias)
+      const ev: Record<string, any> = {}
+      for (const d of allDias) ev[d.data] = { saldo_real: d.saldo_real != null ? String(d.saldo_real) : '', saldo_inicial: d.saldo_inicial != null ? String(d.saldo_inicial) : '', observacao: d.observacao }
+      setEditValues(ev)
+      setLoading(false)
+    })
+  }, [mesSel])
+
+  async function salvarDia(data: string) {
+    const ev = editValues[data]
+    if (!ev) return
+    setSavingDia(data)
+    await fetch('/api/fluxo-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data, saldo_real: ev.saldo_real !== '' ? parseFloat(ev.saldo_real.replace(',', '.')) : null, saldo_inicial: ev.saldo_inicial !== '' ? parseFloat(ev.saldo_inicial.replace(',', '.')) : null, observacao: ev.observacao || null }) })
+    setSavingDia(null)
+  }
+
+  const mesLabel = new Date(mesSel + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  const totalEntradas = dias.reduce((s, d) => s + d.entradas, 0)
+  const totalSaidas = dias.reduce((s, d) => s + d.saidas, 0)
+  const saldoFinal = dias.length > 0 ? dias[dias.length - 1].saldo_calculado : 0
+  const diasDivergentes = dias.filter(d => d.divergente).length
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+          <div className="flex items-center gap-4">
+            <h2 className="text-white font-semibold text-lg">Fluxo de Caixa</h2>
+            <div className="flex items-center gap-1">
+              <button onClick={() => navMes(-1)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"><ChevronLeft className="w-3.5 h-3.5" /></button>
+              <span className="px-3 py-1 bg-zinc-900 rounded-lg text-xs font-medium capitalize min-w-[130px] text-center">{mesLabel}</span>
+              <button onClick={() => navMes(1)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"><ChevronRight className="w-3.5 h-3.5" /></button>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
+        </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-4 gap-3 px-6 py-3 border-b border-zinc-800">
+          <div className="bg-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-xs">Entradas</p><p className="text-emerald-400 font-bold text-base mt-0.5">{fmt(totalEntradas)}</p></div>
+          <div className="bg-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-xs">Saídas</p><p className="text-red-400 font-bold text-base mt-0.5">{fmt(totalSaidas)}</p></div>
+          <div className="bg-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-xs">Saldo Calculado</p><p className={`font-bold text-base mt-0.5 ${saldoFinal >= 0 ? 'text-white' : 'text-red-400'}`}>{fmt(saldoFinal)}</p></div>
+          <div className="bg-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-xs">Divergências</p><p className={`font-bold text-base mt-0.5 ${diasDivergentes > 0 ? 'text-yellow-400' : 'text-zinc-400'}`}>{diasDivergentes} {diasDivergentes === 1 ? 'dia' : 'dias'}</p></div>
+        </div>
+
+        {/* Tabela */}
+        <div className="overflow-y-auto flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-zinc-500 text-sm">Carregando...</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">Data</th>
+                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Entradas</th>
+                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Saídas</th>
+                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Saldo Calc.</th>
+                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium w-32">Saldo Inicial</th>
+                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium w-32">Saldo Real</th>
+                  <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">Observação</th>
+                  <th className="px-4 py-2.5 w-16"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {dias.map((dia) => {
+                  const ev = editValues[dia.data] || { saldo_real: '', saldo_inicial: '', observacao: '' }
+                  const temMov = dia.movimentos.length > 0
+                  const dataDisplay = new Date(dia.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                  const isExpanded = expandedDia === dia.data
+                  return (
+                    <>
+                      <tr key={dia.data} className={`border-b border-zinc-800/40 hover:bg-zinc-800/20 transition-colors ${dia.divergente ? 'bg-yellow-500/5' : ''}`}>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-1.5">
+                            {dia.divergente ? <AlertTriangle className="w-3 h-3 text-yellow-400 flex-shrink-0" /> : dia.saldo_real !== null ? <CheckCircle2 className="w-3 h-3 text-emerald-500 flex-shrink-0" /> : <div className="w-3 h-3" />}
+                            <button onClick={() => setExpandedDia(isExpanded ? null : dia.data)} className={`font-mono ${temMov ? 'text-white hover:text-emerald-400 cursor-pointer' : 'text-zinc-600'}`}>
+                              {dataDisplay}{temMov && <span className="ml-1 text-zinc-500">({dia.movimentos.length})</span>}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-right">{dia.entradas > 0 ? <span className="text-emerald-400 font-medium">{fmt(dia.entradas)}</span> : <span className="text-zinc-700">—</span>}</td>
+                        <td className="px-4 py-2 text-right">{dia.saidas > 0 ? <span className="text-red-400 font-medium">{fmt(dia.saidas)}</span> : <span className="text-zinc-700">—</span>}</td>
+                        <td className="px-4 py-2 text-right"><span className={`font-semibold ${dia.saldo_calculado >= 0 ? 'text-zinc-300' : 'text-red-400'}`}>{fmt(dia.saldo_calculado)}</span></td>
+                        <td className="px-4 py-2"><input type="text" value={ev.saldo_inicial} onChange={e => setEditValues(prev => ({ ...prev, [dia.data]: { ...ev, saldo_inicial: e.target.value } }))} placeholder="—" className="w-full text-right bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500" /></td>
+                        <td className="px-4 py-2"><input type="text" value={ev.saldo_real} onChange={e => setEditValues(prev => ({ ...prev, [dia.data]: { ...ev, saldo_real: e.target.value } }))} placeholder="—" className={`w-full text-right bg-zinc-800 border rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 ${dia.divergente ? 'border-yellow-500/60' : 'border-zinc-700'}`} /></td>
+                        <td className="px-4 py-2"><input type="text" value={ev.observacao} onChange={e => setEditValues(prev => ({ ...prev, [dia.data]: { ...ev, observacao: e.target.value } }))} placeholder="—" className="w-full bg-transparent border-b border-zinc-800 px-1 py-1 text-xs text-zinc-400 placeholder-zinc-700 focus:outline-none focus:border-zinc-600" /></td>
+                        <td className="px-4 py-2 text-center"><button onClick={() => salvarDia(dia.data)} disabled={savingDia === dia.data} className="px-2 py-1 rounded text-xs bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40 transition-colors disabled:opacity-50">{savingDia === dia.data ? '...' : 'Salvar'}</button></td>
+                      </tr>
+                      {isExpanded && dia.movimentos.length > 0 && (
+                        <tr key={`${dia.data}-expand`} className="bg-zinc-900/60">
+                          <td colSpan={8} className="px-8 py-2">
+                            <div className="space-y-1">
+                              {dia.movimentos.map((mov: any, i: number) => (
+                                <div key={i} className="flex items-center gap-3 py-0.5 border-b border-zinc-800/30 last:border-0">
+                                  <span className={`flex-shrink-0 ${mov.tipo === 'CREDIT' ? 'text-emerald-400' : 'text-red-400'}`}>{fmt(mov.valor)}</span>
+                                  <span className="text-zinc-400 flex-1 truncate">{mov.descricao || '—'}</span>
+                                  {mov.categoria && <span className="text-zinc-600 flex-shrink-0">{mov.categoria}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function FinanceiroPage() {
   const [showContasPagar, setShowContasPagar] = useState(false)
+  const [showFluxoCaixa, setShowFluxoCaixa] = useState(false)
   const [mes, setMes] = useState(getCurrentMes)
   const [despesas, setDespesas] = useState<Despesa[]>([])
   const [receitasManuais, setReceitasManuais] = useState<Receita[]>([])
@@ -1154,6 +1332,7 @@ export default function FinanceiroPage() {
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950">
       {showContasPagar && <ContasPagarModal onClose={() => setShowContasPagar(false)} />}
+      {showFluxoCaixa && <FluxoCaixaModal mes={mes} onClose={() => setShowFluxoCaixa(false)} />}
 
       <Header title="Financeiro" lastSync="Atualizado agora" />
 
@@ -1188,13 +1367,22 @@ export default function FinanceiroPage() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setShowContasPagar(true)}
-            className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-orange-500/50 hover:bg-orange-500/10 text-zinc-400 hover:text-orange-400 text-sm font-medium transition-all"
-          >
-            <CreditCard className="w-4 h-4" />
-            Contas a Pagar
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setShowFluxoCaixa(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-emerald-500/50 hover:bg-emerald-500/10 text-zinc-400 hover:text-emerald-400 text-sm font-medium transition-all"
+            >
+              <TrendingUp className="w-4 h-4" />
+              Fluxo de Caixa
+            </button>
+            <button
+              onClick={() => setShowContasPagar(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-orange-500/50 hover:bg-orange-500/10 text-zinc-400 hover:text-orange-400 text-sm font-medium transition-all"
+            >
+              <CreditCard className="w-4 h-4" />
+              Contas a Pagar
+            </button>
+          </div>
         </div>
 
         {/* ── ALERTAS ── */}
