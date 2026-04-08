@@ -15,19 +15,31 @@ function parseOFX(content: string): OFXTransaction[] {
   const transactions: OFXTransaction[] = []
   const text = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
-  // Suporte a OFX SGML (sem fechamento de tags) e XML
-  // Busca todos os blocos <STMTTRN>...</STMTTRN>
-  const blockRegex = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi
-  let match
-
   const getField = (block: string, name: string) => {
     const m = new RegExp(`<${name}>([^<\n\r]+)`, 'i').exec(block)
     return m ? m[1].trim() : ''
   }
 
-  while ((match = blockRegex.exec(text)) !== null) {
-    const block = match[1]
+  // Tenta XML primeiro (com tags de fechamento </STMTTRN>)
+  const xmlBlocks: string[] = []
+  const xmlRegex = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi
+  let m: RegExpExecArray | null
+  while ((m = xmlRegex.exec(text)) !== null) xmlBlocks.push(m[1])
 
+  // Se não encontrou blocos XML, tenta SGML (sem tags de fechamento — padrão dos bancos BR)
+  const blocks: string[] = xmlBlocks.length > 0 ? xmlBlocks : (() => {
+    const sgmlBlocks: string[] = []
+    // Divide pelo início de cada transação <STMTTRN>
+    const parts = text.split(/<STMTTRN>/i)
+    for (let i = 1; i < parts.length; i++) {
+      // Bloco vai até o próximo <STMTTRN> ou até </BANKTRANLIST> ou fim
+      const end = parts[i].search(/<\/STMTTRN>|<\/BANKTRANLIST>|<BANKTRANLIST>/i)
+      sgmlBlocks.push(end >= 0 ? parts[i].slice(0, end) : parts[i])
+    }
+    return sgmlBlocks
+  })()
+
+  for (const block of blocks) {
     const fitid = getField(block, 'FITID')
     const tipo = getField(block, 'TRNTYPE').toUpperCase()
     const dtposted = getField(block, 'DTPOSTED')
@@ -44,6 +56,14 @@ function parseOFX(content: string): OFXTransaction[] {
     if (!fitid || valor === 0) continue
 
     transactions.push({ fitid, tipo, data, valor, descricao: memo, mes })
+  }
+
+  // Garante FITIDs únicos (alguns bancos BR repetem o mesmo FITID)
+  const seenFitids = new Map<string, number>()
+  for (const t of transactions) {
+    const count = seenFitids.get(t.fitid) ?? 0
+    if (count > 0) t.fitid = `${t.fitid}_${count}`
+    seenFitids.set(t.fitid.replace(/_\d+$/, ''), count + 1)
   }
 
   return transactions.sort((a, b) => a.data.localeCompare(b.data))

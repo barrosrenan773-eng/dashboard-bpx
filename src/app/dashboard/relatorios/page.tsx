@@ -12,7 +12,7 @@ import {
   DollarSign, TrendingUp, TrendingDown, Briefcase,
   Percent, FileText, Hash, AlertTriangle, ArrowRight,
   BarChart2, Lock, Unlock, CheckCircle2, Download,
-  X, RefreshCw, Clock, Calendar,
+  X, RefreshCw, Clock, Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -308,6 +308,19 @@ export default function RelatoriosPage() {
   const [snapshotOpen, setSnapshotOpen] = useState<Closure | null>(null)
   const [successMsg, setSuccessMsg]   = useState('')
 
+  // ── Mês selecionado (despesas mensais) ──
+  const [mesSelecionado, setMesSelecionado] = useState(() => {
+    const n = new Date()
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [expandedCat, setExpandedCat] = useState<string | null>(null)
+
+  function navMes(delta: number) {
+    const [y, m] = mesSelecionado.split('-').map(Number)
+    const d = new Date(y, m - 1 + delta, 1)
+    setMesSelecionado(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+
   // ── Filtros ──
   const [periodo, setPeriodo]         = useState<PeriodoKey>('mes')
   const [customStart, setCustomStart] = useState(toISODate(startOfMonth(today)))
@@ -352,26 +365,45 @@ export default function RelatoriosPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo, customStart, customEnd])
 
+  // Todos os contratos do período (para tabela/exibição)
   const contratosFiltrados = useMemo(() => contratos.filter(c => {
     const dt = new Date(c.created_at)
     return dt >= dateStart && dt <= dateEnd && (statusFiltro === 'todos' || c.status === statusFiltro)
   }), [contratos, dateStart, dateEnd, statusFiltro])
+
+  // Apenas finalizados do período → alimentam KPIs de receita, capital, produção, lucro
+  const contratosFinalizados = useMemo(() => contratos.filter(c => {
+    const dt = new Date(c.created_at)
+    return dt >= dateStart && dt <= dateEnd && c.status === 'finalizado'
+  }), [contratos, dateStart, dateEnd])
+
+  // Pipeline: aguardando no período
+  const contratosAguardando = useMemo(() => contratos.filter(c => {
+    const dt = new Date(c.created_at)
+    return dt >= dateStart && dt <= dateEnd && c.status === 'aguardando'
+  }), [contratos, dateStart, dateEnd])
 
   const despesasFiltradas = useMemo(() => despesas.filter(d => {
     const dt = new Date(d.created_at)
     return dt >= dateStart && dt <= dateEnd
   }), [despesas, dateStart, dateEnd])
 
-  const totalCapital  = contratosFiltrados.reduce((s, c) => s + (c.capital ?? 0), 0)
-  const totalReceita  = contratosFiltrados.reduce((s, c) => s + (c.taxa ?? 0), 0)
-  const totalProducao = contratosFiltrados.reduce((s, c) => s + (c.valor_total_contrato ?? ((c.capital ?? 0) + (c.taxa ?? 0))), 0)
+  // KPIs baseados apenas em contratos finalizados
+  const totalCapital  = contratosFinalizados.reduce((s, c) => s + (c.capital ?? 0), 0)
+  const totalReceita  = contratosFinalizados.reduce((s, c) => s + (c.taxa ?? 0), 0)
+  const totalProducao = contratosFinalizados.reduce((s, c) => s + (c.valor_total_contrato ?? ((c.capital ?? 0) + (c.taxa ?? 0))), 0)
   const totalDespesas = despesasFiltradas.reduce((s, d) => s + (d.valor ?? 0), 0)
   const lucro         = totalReceita - totalDespesas
   const margem        = totalReceita > 0 ? (lucro / totalReceita) * 100 : 0
-  const qtd           = contratosFiltrados.length
+  const qtd           = contratosFinalizados.length
   const ticketMedio   = qtd > 0 ? totalProducao / qtd : 0
   const taxaMedia     = qtd > 0 ? totalReceita / qtd : 0
 
+  // Pipeline metrics
+  const pipelineCapital = contratosAguardando.reduce((s, c) => s + (c.capital ?? 0), 0)
+  const pipelineTaxa    = contratosAguardando.reduce((s, c) => s + (c.taxa ?? 0), 0)
+
+  // Gráfico histórico apenas com finalizados
   const chartData = useMemo(() => {
     const months: string[] = []
     for (let i = 5; i >= 0; i--) {
@@ -379,7 +411,7 @@ export default function RelatoriosPage() {
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
     }
     return months.map(m => {
-      const mc = contratos.filter(c => getMonthKey(c.created_at) === m)
+      const mc = contratos.filter(c => getMonthKey(c.created_at) === m && c.status === 'finalizado')
       const md = despesas.filter(d => d.mes === m || getMonthKey(d.created_at) === m)
       const cap  = mc.reduce((s, c) => s + (c.capital ?? 0), 0)
       const taxa = mc.reduce((s, c) => s + (c.taxa ?? 0), 0)
@@ -389,6 +421,36 @@ export default function RelatoriosPage() {
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratos, despesas])
+
+  // ── Despesas do mês selecionado por categoria ──
+  const despesasMes = useMemo(() =>
+    despesas.filter(d => d.mes === mesSelecionado || (d.created_at && d.created_at.startsWith(mesSelecionado)))
+  , [despesas, mesSelecionado])
+
+  const totalDespesasMes = despesasMes.reduce((s, d) => s + (d.valor ?? 0), 0)
+
+  const catColors = ['#f97316','#3b82f6','#10b981','#8b5cf6','#ef4444','#06b6d4','#f59e0b','#ec4899','#84cc16','#6366f1']
+
+  const despesasPorCat = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const d of despesasMes) {
+      const cat = d.categoria || 'Outros'
+      map[cat] = (map[cat] ?? 0) + (d.valor ?? 0)
+    }
+    return Object.entries(map)
+      .map(([cat, val]) => ({ cat, val }))
+      .sort((a, b) => b.val - a.val)
+  }, [despesasMes])
+
+  // ── Contratos finalizados do mês selecionado ──
+  const contratosMes = useMemo(() =>
+    contratos.filter(c => c.created_at && c.created_at.startsWith(mesSelecionado) && c.status === 'finalizado')
+  , [contratos, mesSelecionado])
+
+  const capitalMes = contratosMes.reduce((s, c) => s + (c.capital ?? 0), 0)
+  const taxaMes    = contratosMes.reduce((s, c) => s + (c.taxa ?? 0), 0)
+  const lucroMes   = taxaMes - totalDespesasMes
+  const margemMes  = taxaMes > 0 ? (lucroMes / taxaMes) * 100 : 0
 
   const alertas: { msg: string; color: string; icon: React.ElementType }[] = []
   if (lucro < 0) alertas.push({ msg: `Lucro negativo no período: ${formatCurrency(lucro)}`, color: 'red', icon: TrendingDown })
@@ -522,16 +584,145 @@ export default function RelatoriosPage() {
           </div>
         )}
 
-        {/* ── KPI CARDS ── */}
+        {/* ── KPI CARDS — CONTRATOS FINALIZADOS ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-          <KpiCard label={KPI_LABELS.producao}      value={formatCurrency(totalProducao)} sub={`capital + taxa · ${qtd} contrato${qtd !== 1 ? 's' : ''}`} icon={BarChart2}   color="#3B82F6" colorClass="text-blue-400"    bgClass="bg-blue-500/10" />
-          <KpiCard label={KPI_LABELS.receitaTotal} value={formatCurrency(totalReceita)}  sub="soma das taxas cobradas"  icon={DollarSign}  color="#10B981" colorClass="text-emerald-400"  bgClass="bg-emerald-500/10" />
-          <KpiCard label={KPI_LABELS.capital}      value={formatCurrency(totalCapital)}  sub="capital empregado"        icon={Briefcase}   color="#F59E0B" colorClass="text-amber-400"   bgClass="bg-amber-500/10" />
-          <KpiCard label={KPI_LABELS.despesasTotal} value={formatCurrency(totalDespesas)} sub={`${despesasFiltradas.length} lançamento${despesasFiltradas.length !== 1 ? 's' : ''}`} icon={TrendingDown} color="#EF4444" colorClass="text-red-400" bgClass="bg-red-500/10" />
+          <KpiCard label={KPI_LABELS.producao}      value={formatCurrency(totalProducao)} sub={`capital + taxa · ${qtd} finalizado${qtd !== 1 ? 's' : ''}`} icon={BarChart2}   color="#3B82F6" colorClass="text-blue-400"    bgClass="bg-blue-500/10" />
+          <KpiCard label="Receita (Taxa da Operação)" value={formatCurrency(totalReceita)}  sub="campo Taxa — contratos finalizados"  icon={DollarSign}  color="#10B981" colorClass="text-emerald-400"  bgClass="bg-emerald-500/10" />
+          <KpiCard label="Capital de Giro (Operação)" value={formatCurrency(totalCapital)}  sub="campo Capital — contratos finalizados" icon={Briefcase}   color="#F59E0B" colorClass="text-amber-400"   bgClass="bg-amber-500/10" />
+          <KpiCard label={KPI_LABELS.despesasTotal} value={formatCurrency(totalDespesas)} sub={`${despesasFiltradas.length} lançamento${despesasFiltradas.length !== 1 ? 's' : ''} · aba Financeiro`} icon={TrendingDown} color="#EF4444" colorClass="text-red-400" bgClass="bg-red-500/10" />
           <KpiCard label={KPI_LABELS.lucro}         value={formatCurrency(lucro)}         sub="receita − despesas"       icon={lucro >= 0 ? TrendingUp : TrendingDown} color={lucro >= 0 ? '#10B981' : '#EF4444'} colorClass={lucro >= 0 ? 'text-emerald-400' : 'text-red-400'} bgClass={lucro >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10'} />
           <KpiCard label={KPI_LABELS.margem}        value={`${margem.toFixed(1).replace('.', ',')}%`} sub="lucro / receita" icon={Percent} color={margem >= 20 ? '#10B981' : margem >= 10 ? '#F59E0B' : '#EF4444'} colorClass={margem >= 20 ? 'text-emerald-400' : margem >= 10 ? 'text-amber-400' : 'text-red-400'} bgClass={margem >= 20 ? 'bg-emerald-500/10' : margem >= 10 ? 'bg-amber-500/10' : 'bg-red-500/10'} />
           <KpiCard label={KPI_LABELS.ticketMedio}   value={formatCurrency(ticketMedio)}   sub="produção / contratos"     icon={Hash}        color="#06B6D4" colorClass="text-cyan-400"    bgClass="bg-cyan-500/10" />
           <KpiCard label={KPI_LABELS.taxaMedia}     value={formatCurrency(taxaMedia)}     sub="receita / contratos"      icon={FileText}    color="#8B5CF6" colorClass="text-violet-400"  bgClass="bg-violet-500/10" />
+        </div>
+
+        {/* ── PIPELINE — CONTRATOS AGUARDANDO ── */}
+        {contratosAguardando.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 border-t-2 rounded-xl p-5" style={{ borderTopColor: '#EAB308' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-1.5 rounded-lg bg-yellow-500/10">
+                <Clock className="w-3.5 h-3.5 text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-sm">Pipeline — Aguardando Liberação de Margem</h3>
+                <p className="text-zinc-500 text-xs mt-0.5">Capital em operação · não entra nos KPIs acima · aparece no Caixa como capital em operação</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-center">
+                <p className="text-zinc-500 text-xs mb-1">Contratos</p>
+                <p className="text-yellow-400 font-bold text-xl">{contratosAguardando.length}</p>
+              </div>
+              <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-center">
+                <p className="text-zinc-500 text-xs mb-1">Capital em Operação</p>
+                <p className="text-blue-400 font-bold text-xl">{formatCurrency(pipelineCapital)}</p>
+              </div>
+              <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-center">
+                <p className="text-zinc-500 text-xs mb-1">Taxa Potencial</p>
+                <p className="text-emerald-400 font-bold text-xl">{formatCurrency(pipelineTaxa)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* ── RELATÓRIO DE DESPESAS MENSAL ── */}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          {/* Header com navegador de mês */}
+          <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+            <div>
+              <h3 className="text-white font-semibold text-sm">Despesas por Categoria — Mês</h3>
+              <p className="text-zinc-500 text-xs mt-0.5">Origem: tabela de despesas · Capital e Taxa: aba Contratos</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => navMes(-1)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-white font-semibold text-sm min-w-[80px] text-center">{fmtMes(mesSelecionado)}</span>
+              <button onClick={() => navMes(1)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-5">
+            {/* KPIs do mês */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Capital de Giro', value: fmt(capitalMes), color: 'text-amber-400', sub: `${contratosMes.length} contrato${contratosMes.length !== 1 ? 's' : ''}` },
+                { label: 'Receita (Taxa)', value: fmt(taxaMes), color: 'text-emerald-400', sub: 'soma das taxas' },
+                { label: 'Despesas', value: fmt(totalDespesasMes), color: 'text-red-400', sub: `${despesasMes.length} lançamento${despesasMes.length !== 1 ? 's' : ''}` },
+                { label: 'Resultado', value: fmt(lucroMes), color: lucroMes >= 0 ? 'text-violet-400' : 'text-red-400', sub: `margem ${margemMes.toFixed(1)}%` },
+              ].map(k => (
+                <div key={k.label} className="bg-zinc-800/60 rounded-xl p-3.5">
+                  <p className="text-zinc-500 text-xs mb-1">{k.label}</p>
+                  <p className={`font-bold text-base ${k.color}`}>{k.value}</p>
+                  <p className="text-zinc-600 text-xs mt-0.5">{k.sub}</p>
+                </div>
+              ))}
+            </div>
+
+            {despesasPorCat.length === 0 ? (
+              <div className="text-center py-8 text-zinc-600 text-sm">Nenhuma despesa em {fmtMes(mesSelecionado)}</div>
+            ) : (
+              <>
+                {/* Barra empilhada */}
+                <div className="flex h-3 rounded-full overflow-hidden gap-px">
+                  {despesasPorCat.map((item, i) => (
+                    <div key={item.cat}
+                      style={{ width: `${(item.val / totalDespesasMes) * 100}%`, backgroundColor: catColors[i % catColors.length] }}
+                      title={`${item.cat}: ${fmt(item.val)}`}
+                    />
+                  ))}
+                </div>
+
+                {/* Categorias com barras proporcionais */}
+                <div className="space-y-2">
+                  {despesasPorCat.map((item, i) => {
+                    const pct = totalDespesasMes > 0 ? (item.val / totalDespesasMes) * 100 : 0
+                    const color = catColors[i % catColors.length]
+                    const itens = despesasMes.filter(d => (d.categoria || 'Outros') === item.cat)
+                    const isOpen = expandedCat === item.cat
+                    return (
+                      <div key={item.cat} className="rounded-xl overflow-hidden border border-zinc-800">
+                        <button
+                          onClick={() => setExpandedCat(isOpen ? null : item.cat)}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-800/40 transition-colors"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                          <span className="text-zinc-200 text-sm font-medium flex-1 text-left capitalize">{item.cat}</span>
+                          <div className="flex-1 mx-3 bg-zinc-800 rounded-full h-1.5 hidden sm:block">
+                            <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+                          </div>
+                          <span className="text-zinc-500 text-xs w-10 text-right">{pct.toFixed(0)}%</span>
+                          <span className="text-white font-semibold text-sm w-28 text-right">{fmt(item.val)}</span>
+                          {isOpen ? <ChevronUp className="w-4 h-4 text-zinc-500 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-zinc-500 flex-shrink-0" />}
+                        </button>
+                        {isOpen && (
+                          <div className="border-t border-zinc-800 divide-y divide-zinc-800/60">
+                            {itens.map(d => (
+                              <div key={d.id} className="flex items-center justify-between px-4 py-2.5 bg-zinc-800/20">
+                                <span className="text-zinc-400 text-xs truncate max-w-[60%]">{d.descricao || '—'}</span>
+                                <span className="text-red-400 text-xs font-semibold">{fmt(d.valor)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Total */}
+                <div className="flex items-center justify-between px-4 py-3 bg-zinc-800/40 rounded-xl border border-zinc-700/50">
+                  <span className="text-zinc-400 text-sm font-medium">Total de Despesas</span>
+                  <span className="text-red-400 font-bold text-base">{fmt(totalDespesasMes)}</span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* ── COMPOSIÇÃO DO RESULTADO ── */}
@@ -540,8 +731,8 @@ export default function RelatoriosPage() {
           <div className="flex flex-wrap items-center gap-2">
             {[
               { label: KPI_LABELS.producao,  value: totalProducao, bg: 'bg-blue-500/10',   border: 'border-blue-500/30',   text: 'text-blue-400' },
-              { label: KPI_LABELS.capital,   value: totalCapital,  bg: 'bg-amber-500/10',  border: 'border-amber-500/30',  text: 'text-amber-400' },
-              { label: KPI_LABELS.receita,   value: totalReceita,  bg: 'bg-emerald-500/10',border: 'border-emerald-500/30',text: 'text-emerald-400' },
+              { label: 'Capital de Giro',  value: totalCapital,  bg: 'bg-amber-500/10',  border: 'border-amber-500/30',  text: 'text-amber-400' },
+              { label: 'Receita (Taxa)',   value: totalReceita,  bg: 'bg-emerald-500/10',border: 'border-emerald-500/30',text: 'text-emerald-400' },
               { label: KPI_LABELS.despesas,  value: totalDespesas, bg: 'bg-red-500/10',    border: 'border-red-500/30',    text: 'text-red-400' },
               { label: KPI_LABELS.lucro,     value: lucro,         bg: lucro >= 0 ? 'bg-violet-500/10' : 'bg-red-500/10', border: lucro >= 0 ? 'border-violet-500/30' : 'border-red-500/30', text: lucro >= 0 ? 'text-violet-400' : 'text-red-400' },
             ].map((item, i, arr) => (

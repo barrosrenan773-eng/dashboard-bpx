@@ -1,12 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-const supabase = createClient(
-  (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ffpeboanytasxoihrflz.supabase.co'),
-  (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '')
-)
+function getSupabase() {
+  return createClient(
+    (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim(),
+    (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim()
+  )
+}
 
 export async function GET(req: NextRequest) {
+  const supabase = getSupabase()
   const mes = req.nextUrl.searchParams.get('mes')
 
   let query = supabase
@@ -25,8 +28,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = getSupabase()
   const body = await req.json()
-  const { tipo, descricao, valor, mes } = body
+  const { tipo, caixa_tipo, descricao, valor, mes } = body
 
   if (!tipo || !mes) {
     return NextResponse.json({ error: 'tipo e mes obrigatórios' }, { status: 400 })
@@ -34,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('caixa')
-    .insert({ tipo, descricao: descricao ?? '', valor: valor ?? 0, mes })
+    .insert({ tipo, caixa_tipo: caixa_tipo ?? 'bpx', descricao: descricao ?? '', valor: valor ?? 0, mes })
     .select()
     .single()
 
@@ -43,6 +47,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const supabase = getSupabase()
   const body = await req.json()
   const { id, ...fields } = body
 
@@ -60,6 +65,7 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const supabase = getSupabase()
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
 

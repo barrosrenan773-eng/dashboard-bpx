@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   try {
     const headers = {
-      'api-token': process.env.CLINT_API_KEY,
+      'api-token': process.env.CLINT_API_TOKEN,
       'Content-Type': 'application/json',
     }
 
@@ -33,9 +33,9 @@ export async function GET(request: Request) {
 
     // Busca em paralelo: totais de leads, won e leads de hoje (apenas primeira página de cada)
     const [leadsRes, wonRes, hojeRes] = await Promise.all([
-      axios.get(`${process.env.CLINT_BASE_URL}/v1/deals`, { headers, params: { ...leadsParams, per_page: 200 } }),
-      axios.get(`${process.env.CLINT_BASE_URL}/v1/deals`, { headers, params: { ...wonParams, per_page: 200 } }),
-      axios.get(`${process.env.CLINT_BASE_URL}/v1/deals`, { headers, params: hojeParams }),
+      axios.get(`https://api.clint.digital/v1/deals`, { headers, params: { ...leadsParams, per_page: 200 } }),
+      axios.get(`https://api.clint.digital/v1/deals`, { headers, params: { ...wonParams, per_page: 200 } }),
+      axios.get(`https://api.clint.digital/v1/deals`, { headers, params: hojeParams }),
     ])
 
     const totalWon: number = wonRes.data.totalCount || 0
@@ -53,19 +53,19 @@ export async function GET(request: Request) {
 
     for (let p = 2; p <= Math.min(wonTotalPages, 30); p++) {
       extraRequests.push(
-        axios.get(`${process.env.CLINT_BASE_URL}/v1/deals`, { headers, params: { ...wonParams, per_page: 200, page: p } })
+        axios.get(`https://api.clint.digital/v1/deals`, { headers, params: { ...wonParams, per_page: 200, page: p } })
           .then(r => ({ type: 'won' as const, data: r.data.data || [] }))
       )
     }
     for (let p = 2; p <= Math.min(leadsTotalPages, 50); p++) {
       extraRequests.push(
-        axios.get(`${process.env.CLINT_BASE_URL}/v1/deals`, { headers, params: { ...leadsParams, per_page: 200, page: p } })
+        axios.get(`https://api.clint.digital/v1/deals`, { headers, params: { ...leadsParams, per_page: 200, page: p } })
           .then(r => ({ type: 'leads' as const, data: r.data.data || [] }))
       )
     }
     for (let p = 2; p <= Math.min(hojeTotalPages, 10); p++) {
       extraRequests.push(
-        axios.get(`${process.env.CLINT_BASE_URL}/v1/deals`, { headers, params: { ...hojeParams, per_page: 200, page: p } })
+        axios.get(`https://api.clint.digital/v1/deals`, { headers, params: { ...hojeParams, per_page: 200, page: p } })
           .then(r => ({ type: 'hoje' as const, data: r.data.data || [] }))
       )
     }

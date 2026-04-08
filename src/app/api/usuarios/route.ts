@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ffpeboanytasxoihrflz.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL).trim(),
+  (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim(),
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
@@ -15,15 +15,24 @@ export async function GET() {
 
   const { data: profiles, error } = await supabaseAdmin
     .from('profiles')
-    .select('id, email, name, role, ativo, abas_permitidas, escopo, created_at')
+    .select('id, name, role, ativo, abas_permitidas, escopo, created_at')
     .order('created_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const merged = (profiles || []).map(p => ({
-    ...p,
-    email: p.email || authMap[p.id]?.email || '',
-    ultimo_acesso: authMap[p.id]?.last_sign_in_at || null,
+  const profileMap: Record<string, (typeof profiles)[0]> = {}
+  ;(profiles || []).forEach(p => { profileMap[p.id] = p })
+
+  const merged = (authData?.users || []).map(u => ({
+    id: u.id,
+    email: u.email || '',
+    name: profileMap[u.id]?.name || '',
+    role: profileMap[u.id]?.role || 'visualizador',
+    ativo: profileMap[u.id]?.ativo ?? true,
+    abas_permitidas: profileMap[u.id]?.abas_permitidas ?? [],
+    escopo: profileMap[u.id]?.escopo || 'geral',
+    created_at: profileMap[u.id]?.created_at || u.created_at,
+    ultimo_acesso: u.last_sign_in_at || null,
   }))
 
   return NextResponse.json(merged)
@@ -46,7 +55,6 @@ export async function POST(req: Request) {
 
   const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
     id: authData.user.id,
-    email,
     name: name || email,
     role: role || 'visualizador',
     ativo: true,
@@ -76,7 +84,7 @@ export async function PUT(req: Request) {
   if (escopo !== undefined)          update.escopo = escopo
 
   if (Object.keys(update).length > 0) {
-    const { error } = await supabaseAdmin.from('profiles').update(update).eq('id', id)
+    const { error } = await supabaseAdmin.from('profiles').upsert({ id, ...update })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 

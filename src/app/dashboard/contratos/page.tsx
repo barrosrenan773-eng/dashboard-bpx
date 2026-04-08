@@ -6,8 +6,8 @@ import { formatCurrency } from '@/lib/utils'
 import { KPI_LABELS as L } from '@/lib/calculos'
 import {
   Plus, Pencil, Trash2, X, Check,
-  FileText, Briefcase, DollarSign, TrendingUp, Clock,
-  Upload, AlertCircle, Loader2,
+  FileText, Briefcase, DollarSign, TrendingUp, Clock, CheckCircle2,
+  Upload, AlertCircle, Loader2, Paperclip, Download, ExternalLink,
 } from 'lucide-react'
 
 type Contrato = {
@@ -17,20 +17,20 @@ type Contrato = {
   origem: string | null
   capital: number
   taxa: number
-  status: 'aguardando' | 'pendente' | 'finalizado'
+  status: 'aguardando' | 'finalizado'
   data_finalizacao: string | null
+  arquivo_url: string | null
+  arquivo_nome: string | null
   created_at: string
 }
 
 const STATUS_LABEL: Record<Contrato['status'], string> = {
-  aguardando: 'Aguardando margem',
-  pendente: 'Pendente',
+  aguardando: 'Aguardando liberação de margem',
   finalizado: 'Finalizado',
 }
 
 const STATUS_STYLE: Record<Contrato['status'], string> = {
   aguardando: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
-  pendente:   'text-blue-400 bg-blue-500/10 border-blue-500/30',
   finalizado: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
 }
 
@@ -42,16 +42,14 @@ const SERVICOS = [
 
 const ORIGENS = ['BPX', 'CCA1', 'CCA2'] as const
 
-const EMPTY_FORM = { nome: '', servico: SERVICOS[0] as string, origem: ORIGENS[0] as string, capital: '', taxa: '', status: 'aguardando' as Contrato['status'], data_finalizacao: '' }
-
-type DocxPreview = {
-  nome: string
-  capital: string
-  taxa: string
-  servico: string
-  origem: string
-  data_finalizacao: string
-  naoEncontrados: string[]
+const EMPTY_FORM = {
+  nome: '',
+  servico: SERVICOS[0] as string,
+  origem: ORIGENS[0] as string,
+  capital: '',
+  taxa: '',
+  status: 'aguardando' as Contrato['status'],
+  data_finalizacao: '',
 }
 
 function KpiCard({
@@ -84,11 +82,10 @@ export default function ContratosPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Upload .docx
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState('')
-  const [preview, setPreview] = useState<DocxPreview | null>(null)
+  // Arquivo anexo
+  const anexoRef = useRef<HTMLInputElement>(null)
+  const [anexoFile, setAnexoFile] = useState<File | null>(null)
+  const [uploadingAnexo, setUploadingAnexo] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -110,21 +107,40 @@ export default function ContratosPage() {
     const body = {
       nome: form.nome,
       servico: form.servico,
-      origem: (form as typeof form & { origem: string }).origem || null,
+      origem: form.origem || null,
       capital: parseFloat(form.capital) || 0,
       taxa: parseFloat(form.taxa) || 0,
       status: form.status,
-      data_finalizacao: (form as typeof form & { data_finalizacao: string }).data_finalizacao || null,
+      data_finalizacao: form.data_finalizacao || null,
     }
     const res = editId
       ? await fetch('/api/contratos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editId, ...body }) })
       : await fetch('/api/contratos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     const data = await res.json()
     if (data.error) { setError(data.error); setSaving(false); return }
+
+    // Se tiver arquivo selecionado, faz upload
+    if (anexoFile && data.id) {
+      setUploadingAnexo(true)
+      const fd = new FormData()
+      fd.append('file', anexoFile)
+      fd.append('id', String(data.id))
+      await fetch('/api/contratos/upload', { method: 'POST', body: fd })
+      setUploadingAnexo(false)
+    } else if (anexoFile && editId) {
+      setUploadingAnexo(true)
+      const fd = new FormData()
+      fd.append('file', anexoFile)
+      fd.append('id', String(editId))
+      await fetch('/api/contratos/upload', { method: 'POST', body: fd })
+      setUploadingAnexo(false)
+    }
+
     setSaving(false)
     setShowForm(false)
     setForm(EMPTY_FORM)
     setEditId(null)
+    setAnexoFile(null)
     load()
   }
 
@@ -134,9 +150,23 @@ export default function ContratosPage() {
     load()
   }
 
+  async function handleRemoverAnexo(id: number) {
+    await fetch(`/api/contratos/upload?id=${id}`, { method: 'DELETE' })
+    load()
+  }
+
   function handleEdit(c: Contrato) {
-    setForm({ nome: c.nome, servico: c.servico, origem: c.origem ?? ORIGENS[0], capital: String(c.capital), taxa: String(c.taxa), status: c.status, data_finalizacao: c.data_finalizacao ?? '' })
+    setForm({
+      nome: c.nome,
+      servico: c.servico,
+      origem: c.origem ?? ORIGENS[0],
+      capital: String(c.capital),
+      taxa: String(c.taxa),
+      status: c.status,
+      data_finalizacao: c.data_finalizacao ?? '',
+    })
     setEditId(c.id)
+    setAnexoFile(null)
     setShowForm(true)
     setError('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -147,59 +177,11 @@ export default function ContratosPage() {
     setForm(EMPTY_FORM)
     setEditId(null)
     setError('')
+    setAnexoFile(null)
   }
 
   async function handleStatusChange(id: number, status: Contrato['status']) {
     await fetch('/api/contratos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) })
-    load()
-  }
-
-  async function handleDocxUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setUploadError('')
-    setPreview(null)
-    const fd = new FormData()
-    fd.append('file', file)
-    try {
-      const res = await fetch('/api/contratos/parse-docx', { method: 'POST', body: fd })
-      const data = await res.json()
-      if (data.error) { setUploadError(data.error); setUploading(false); return }
-      const c = data.campos ?? {}
-      setPreview({
-        nome: c.nome ?? '',
-        capital: c.capital != null ? String(c.capital) : '',
-        taxa: c.taxa != null ? String(c.taxa) : '',
-        servico: c.servico ?? SERVICOS[0],
-        origem: ORIGENS[0],
-        data_finalizacao: '',
-        naoEncontrados: data.naoEncontrados ?? [],
-      })
-    } catch (err) {
-      setUploadError(String(err))
-    }
-    setUploading(false)
-    e.target.value = ''
-  }
-
-  async function handleConfirmarImport() {
-    if (!preview) return
-    setSaving(true)
-    const body = {
-      nome: preview.nome,
-      servico: preview.servico,
-      origem: preview.origem || null,
-      capital: parseFloat(preview.capital) || 0,
-      taxa: parseFloat(preview.taxa) || 0,
-      status: 'aguardando' as Contrato['status'],
-      data_finalizacao: preview.data_finalizacao || null,
-    }
-    const res = await fetch('/api/contratos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    const data = await res.json()
-    setSaving(false)
-    if (data.error) { setUploadError(data.error); return }
-    setPreview(null)
     load()
   }
 
@@ -268,129 +250,7 @@ export default function ContratosPage() {
           />
         </div>
 
-        {/* ── UPLOAD DOCX ── */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".docx"
-          className="hidden"
-          onChange={handleDocxUpload}
-        />
-
-        {/* Preview de importação */}
-        {preview && (
-          <div className="bg-zinc-900 border border-emerald-500/30 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-emerald-500/10">
-                  <FileText className="w-4 h-4 text-emerald-400" />
-                </div>
-                <div>
-                  <h4 className="text-white font-semibold text-sm">Contrato lido — ajuste e confirme</h4>
-                  <p className="text-zinc-500 text-xs">Edite os campos abaixo e clique em Confirmar para salvar</p>
-                </div>
-              </div>
-              <button onClick={() => setPreview(null)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-              {/* Nome */}
-              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
-                <p className="text-zinc-500 text-xs mb-1">Nome do cliente</p>
-                <input
-                  value={preview.nome}
-                  onChange={e => setPreview(p => p ? { ...p, nome: e.target.value } : p)}
-                  className="w-full bg-transparent text-white text-sm font-semibold focus:outline-none placeholder:text-zinc-600"
-                  placeholder="Nome completo"
-                />
-              </div>
-              {/* Serviço */}
-              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
-                <p className="text-zinc-500 text-xs mb-1">Serviço</p>
-                <select
-                  value={preview.servico}
-                  onChange={e => setPreview(p => p ? { ...p, servico: e.target.value } : p)}
-                  className="w-full bg-transparent text-white text-sm font-semibold focus:outline-none"
-                >
-                  {SERVICOS.map(s => <option key={s} value={s} className="bg-zinc-800">{s}</option>)}
-                </select>
-              </div>
-              {/* Capital */}
-              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
-                <p className="text-zinc-500 text-xs mb-1">Capital — Saldo Devedor (R$)</p>
-                <input
-                  type="number"
-                  value={preview.capital}
-                  onChange={e => setPreview(p => p ? { ...p, capital: e.target.value } : p)}
-                  className="w-full bg-transparent text-blue-400 text-sm font-semibold focus:outline-none placeholder:text-zinc-600"
-                  placeholder="0.00"
-                />
-              </div>
-              {/* Taxa */}
-              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
-                <p className="text-zinc-500 text-xs mb-1">Taxa — Serviços Financeiros (R$)</p>
-                <input
-                  type="number"
-                  value={preview.taxa}
-                  onChange={e => setPreview(p => p ? { ...p, taxa: e.target.value } : p)}
-                  className="w-full bg-transparent text-emerald-400 text-sm font-semibold focus:outline-none placeholder:text-zinc-600"
-                  placeholder="0.00"
-                />
-              </div>
-              {/* Data de finalização */}
-              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
-                <p className="text-zinc-500 text-xs mb-1">Data de finalização</p>
-                <input
-                  type="date"
-                  value={preview.data_finalizacao}
-                  onChange={e => setPreview(p => p ? { ...p, data_finalizacao: e.target.value } : p)}
-                  className="w-full bg-transparent text-zinc-300 text-sm font-semibold focus:outline-none"
-                />
-              </div>
-              {/* Origem */}
-              <div className="bg-zinc-800/50 rounded-lg px-3 py-2.5">
-                <p className="text-zinc-500 text-xs mb-1">Origem</p>
-                <select
-                  value={preview.origem}
-                  onChange={e => setPreview(p => p ? { ...p, origem: e.target.value } : p)}
-                  className="w-full bg-transparent text-white text-sm font-semibold focus:outline-none"
-                >
-                  {ORIGENS.map(o => <option key={o} value={o} className="bg-zinc-800">{o}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleConfirmarImport}
-                disabled={saving}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
-              >
-                <Check className="w-4 h-4" />
-                {saving ? 'Salvando...' : 'Confirmar'}
-              </button>
-              <button
-                onClick={() => setPreview(null)}
-                className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4" />
-                Cancelar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {uploadError && (
-          <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-            <p className="text-red-300 text-sm">{uploadError}</p>
-            <button onClick={() => setUploadError('')} className="ml-auto text-zinc-500 hover:text-zinc-300"><X className="w-4 h-4" /></button>
-          </div>
-        )}
-
-        {/* ── FORMULÁRIO ── */}
+        {/* ── FORMULÁRIO MANUAL ── */}
         {showForm && (
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
             <div className="flex items-center justify-between mb-5">
@@ -403,7 +263,7 @@ export default function ContratosPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Nome do cliente</label>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Nome do cliente *</label>
                 <input
                   value={form.nome}
                   onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
@@ -412,7 +272,7 @@ export default function ContratosPage() {
                 />
               </div>
               <div>
-                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Tipo de serviço</label>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Tipo de serviço *</label>
                 <select
                   value={form.servico}
                   onChange={e => setForm(f => ({ ...f, servico: e.target.value }))}
@@ -422,7 +282,7 @@ export default function ContratosPage() {
                 </select>
               </div>
               <div>
-                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Capital (R$)</label>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Capital — Saldo Devedor (R$)</label>
                 <input
                   type="number"
                   value={form.capital}
@@ -432,7 +292,7 @@ export default function ContratosPage() {
                 />
               </div>
               <div>
-                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Taxa cobrada (R$)</label>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Taxa — Serviços Financeiros (R$)</label>
                 <input
                   type="number"
                   value={form.taxa}
@@ -444,7 +304,7 @@ export default function ContratosPage() {
               <div>
                 <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Origem</label>
                 <select
-                  value={(form as typeof form & { origem: string }).origem ?? ORIGENS[0]}
+                  value={form.origem ?? ORIGENS[0]}
                   onChange={e => setForm(f => ({ ...f, origem: e.target.value }))}
                   className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
                 >
@@ -455,22 +315,52 @@ export default function ContratosPage() {
                 <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Data de finalização</label>
                 <input
                   type="date"
-                  value={(form as typeof form & { data_finalizacao: string }).data_finalizacao ?? ''}
+                  value={form.data_finalizacao ?? ''}
                   onChange={e => setForm(f => ({ ...f, data_finalizacao: e.target.value }))}
                   className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
+              {editId && (
+                <div className="md:col-span-2">
+                  <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Status</label>
+                  <select
+                    value={form.status}
+                    onChange={e => setForm(f => ({ ...f, status: e.target.value as Contrato['status'] }))}
+                    className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                  >
+                    <option value="aguardando">Aguardando liberação de margem</option>
+                    <option value="finalizado">Finalizado</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Anexo de arquivo */}
               <div className="md:col-span-2">
-                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Status</label>
-                <select
-                  value={form.status}
-                  onChange={e => setForm(f => ({ ...f, status: e.target.value as Contrato['status'] }))}
-                  className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-                >
-                  <option value="aguardando">Aguardando liberação de margem</option>
-                  <option value="pendente">Pendente</option>
-                  <option value="finalizado">Finalizado</option>
-                </select>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Contrato em Anexo (PDF, DOCX — referência)</label>
+                <input
+                  ref={anexoRef}
+                  type="file"
+                  accept=".pdf,.docx,.doc,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={e => setAnexoFile(e.target.files?.[0] ?? null)}
+                />
+                {anexoFile ? (
+                  <div className="flex items-center gap-3 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5">
+                    <Paperclip className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-zinc-300 text-sm flex-1 truncate">{anexoFile.name}</span>
+                    <button onClick={() => setAnexoFile(null)} className="text-zinc-500 hover:text-red-400 transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => anexoRef.current?.click()}
+                    className="w-full flex items-center gap-2 bg-zinc-800 border border-dashed border-zinc-700 hover:border-zinc-500 text-zinc-500 hover:text-zinc-300 rounded-lg px-3 py-3 text-sm transition-colors"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                    Clique para anexar o contrato (PDF, DOCX…)
+                  </button>
+                )}
               </div>
             </div>
 
@@ -481,11 +371,11 @@ export default function ContratosPage() {
             <div className="flex gap-3 mt-5">
               <button
                 onClick={handleSave}
-                disabled={saving}
+                disabled={saving || uploadingAnexo}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
               >
-                <Check className="w-4 h-4" />
-                {saving ? 'Salvando...' : editId ? 'Salvar alterações' : 'Criar contrato'}
+                {saving || uploadingAnexo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {uploadingAnexo ? 'Enviando arquivo...' : saving ? 'Salvando...' : editId ? 'Salvar alterações' : 'Criar contrato'}
               </button>
               <button
                 onClick={handleCancel}
@@ -525,23 +415,13 @@ export default function ContratosPage() {
                 <p className="text-zinc-500 text-xs mt-0.5">{contratosFiltrados.length} registro{contratosFiltrados.length !== 1 ? 's' : ''}{filtroServico !== 'todos' ? ` · ${filtroServico}` : ''}</p>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                {uploading ? 'Lendo...' : 'Importar .docx'}
-              </button>
-              <button
-                onClick={() => { setShowForm(true); setEditId(null); setForm(EMPTY_FORM); setError('') }}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Novo Contrato
-              </button>
-            </div>
+            <button
+              onClick={() => { setShowForm(true); setEditId(null); setForm(EMPTY_FORM); setError(''); setAnexoFile(null) }}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Novo Contrato
+            </button>
           </div>
 
           {loading ? (
@@ -562,6 +442,7 @@ export default function ContratosPage() {
                     <th className="text-right text-xs text-zinc-500 font-medium uppercase tracking-wider py-3 px-4">Capital</th>
                     <th className="text-right text-xs text-zinc-500 font-medium uppercase tracking-wider py-3 px-4">Taxa</th>
                     <th className="text-left text-xs text-zinc-500 font-medium uppercase tracking-wider py-3 px-4">Status</th>
+                    <th className="text-center text-xs text-zinc-500 font-medium uppercase tracking-wider py-3 px-4">Anexo</th>
                     <th className="text-right text-xs text-zinc-500 font-medium uppercase tracking-wider py-3 px-5">Data</th>
                     <th className="text-right text-xs text-zinc-500 font-medium uppercase tracking-wider py-3 px-5">Ações</th>
                   </tr>
@@ -570,7 +451,10 @@ export default function ContratosPage() {
                   {contratosFiltrados.map(c => (
                     <tr key={c.id} className="hover:bg-zinc-800/40 transition-colors group">
                       <td className="py-4 px-5">
-                        <span className="text-white font-medium text-sm">{c.nome}</span>
+                        <div>
+                          <span className="text-white font-medium text-sm">{c.nome}</span>
+                          {c.origem && <span className="ml-2 text-zinc-600 text-xs">{c.origem}</span>}
+                        </div>
                       </td>
                       <td className="py-4 px-4">
                         <span className="text-zinc-400 text-sm">{c.servico}</span>
@@ -582,16 +466,47 @@ export default function ContratosPage() {
                         <span className="text-emerald-400 font-semibold text-sm">{formatCurrency(c.taxa)}</span>
                       </td>
                       <td className="py-4 px-4">
-                        <select
-                          value={c.status}
-                          onChange={e => handleStatusChange(c.id, e.target.value as Contrato['status'])}
-                          className={`text-xs font-medium px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none transition-colors ${STATUS_STYLE[c.status]}`}
-                          style={{ backgroundColor: 'transparent' }}
-                        >
-                          <option value="aguardando">Aguardando margem</option>
-                          <option value="pendente">Pendente</option>
-                          <option value="finalizado">Finalizado</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${STATUS_STYLE[c.status]}`}>
+                            {STATUS_LABEL[c.status]}
+                          </span>
+                          {c.status === 'aguardando' && (
+                            <button
+                              onClick={() => handleStatusChange(c.id, 'finalizado')}
+                              title="Marcar como Finalizado"
+                              className="flex items-center gap-1 text-xs text-zinc-500 hover:text-emerald-400 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Finalizar
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-center">
+                        {c.arquivo_url ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <a
+                              href={c.arquivo_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={c.arquivo_nome ?? 'Ver contrato'}
+                              className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                            >
+                              <Paperclip className="w-3.5 h-3.5" />
+                              <span className="hidden md:inline max-w-[100px] truncate">{c.arquivo_nome ?? 'Anexo'}</span>
+                              <ExternalLink className="w-3 h-3 opacity-60" />
+                            </a>
+                            <button
+                              onClick={() => handleRemoverAnexo(c.id)}
+                              title="Remover anexo"
+                              className="text-zinc-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 ml-1"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-zinc-700 text-xs">—</span>
+                        )}
                       </td>
                       <td className="py-4 px-5 text-right">
                         <span className="text-zinc-500 text-xs">

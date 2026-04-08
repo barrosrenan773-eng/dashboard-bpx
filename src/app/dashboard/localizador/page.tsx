@@ -7,10 +7,8 @@ import {
   Search,
   Building2,
   Phone,
-  CreditCard,
   Users,
   CheckCircle2,
-  XCircle,
   ChevronDown,
   ChevronRight,
   MessageCircle,
@@ -193,11 +191,14 @@ function LinhaServidor({ s, onToggleContato }: { s: Servidor; onToggleContato: (
 
 // ─── Grupo por órgão ─────────────────────────────────────────────────────────
 
+const POR_PAGINA_ORGAO = 50
+
 function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; servidores: Servidor[]; onToggleContato: (id: string, valor: boolean) => void }) {
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [filtroMargem, setFiltroMargem] = useState<'todos' | 'com_margem' | 'sem_margem' | 'negativado'>('todos')
   const [filtroContato, setFiltroContato] = useState<'todos' | 'contatado' | 'pendente'>('todos')
+  const [pagina, setPagina] = useState(1)
 
   const filtrados = servidores.filter(s => {
     const termo = busca.toLowerCase()
@@ -208,6 +209,9 @@ function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; ser
     const matchContato = filtroContato === 'todos' || (filtroContato === 'contatado' ? s.contatado : !s.contatado)
     return matchBusca && matchMargem && matchContato
   })
+
+  const totalPaginas = Math.ceil(filtrados.length / POR_PAGINA_ORGAO)
+  const paginaAtual = filtrados.slice((pagina - 1) * POR_PAGINA_ORGAO, pagina * POR_PAGINA_ORGAO)
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
@@ -236,7 +240,7 @@ function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; ser
                 type="text"
                 placeholder="Buscar por nome ou CPF..."
                 value={busca}
-                onChange={e => setBusca(e.target.value)}
+                onChange={e => { setBusca(e.target.value); setPagina(1) }}
                 className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-emerald-500 transition-colors"
               />
             </div>
@@ -247,7 +251,7 @@ function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; ser
                 { key: 'sem_margem', label: 'Sem margem', cls: 'bg-zinc-600' },
                 { key: 'negativado', label: 'Negativado', cls: 'bg-red-600' },
               ] as const).map(op => (
-                <button key={op.key} onClick={() => setFiltroMargem(op.key)}
+                <button key={op.key} onClick={() => { setFiltroMargem(op.key); setPagina(1) }}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${filtroMargem === op.key ? `${op.cls ?? 'bg-zinc-600'} text-white` : 'text-zinc-400 hover:text-white'}`}>
                   {op.label}
                 </button>
@@ -259,7 +263,7 @@ function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; ser
                 { key: 'pendente', label: 'Pendentes', cls: 'bg-amber-600' },
                 { key: 'contatado', label: 'Contatados', cls: 'bg-violet-600' },
               ] as const).map(op => (
-                <button key={op.key} onClick={() => setFiltroContato(op.key)}
+                <button key={op.key} onClick={() => { setFiltroContato(op.key); setPagina(1) }}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${filtroContato === op.key ? `${op.cls ?? 'bg-zinc-600'} text-white` : 'text-zinc-400 hover:text-white'}`}>
                   {op.label}
                 </button>
@@ -280,12 +284,32 @@ function GrupoOrgao({ orgao, servidores, onToggleContato }: { orgao: string; ser
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {filtrados.map(s => (
+                {paginaAtual.map(s => (
                   <LinhaServidor key={s.id} s={s} onToggleContato={onToggleContato} />
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Paginação interna */}
+          {totalPaginas > 1 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800">
+              <p className="text-zinc-500 text-xs">
+                {(pagina - 1) * POR_PAGINA_ORGAO + 1}–{Math.min(pagina * POR_PAGINA_ORGAO, filtrados.length)} de {filtrados.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina === 1}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                  ← Anterior
+                </button>
+                <span className="text-zinc-500 text-xs px-2">{pagina}/{totalPaginas}</span>
+                <button onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))} disabled={pagina === totalPaginas}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                  Próxima →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -477,14 +501,8 @@ export default function LoczalizadorPage() {
   const [aba, setAba] = useState<'servidores' | 'novas_consignacoes'>('servidores')
   const [servidores, setServidores] = useState<Servidor[]>([])
   const [loading, setLoading] = useState(true)
-  const [busca, setBusca] = useState('')
   const [filtroOrgaoGrafico, setFiltroOrgaoGrafico] = useState<string>('todos')
-  const [filtroMargem, setFiltroMargem] = useState<'todos' | 'com_margem' | 'sem_margem' | 'negativado'>('todos')
-  const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ok' | 'erro_cc'>('todos')
-  const [filtroContato, setFiltroContato] = useState<'todos' | 'contatado' | 'pendente'>('todos')
   const [filtroPeriodo, setFiltroPeriodo] = useState<'todos' | 'hoje' | 'semana' | 'mes'>('todos')
-  const [pagina, setPagina] = useState(1)
-  const POR_PAGINA = 50
 
   useEffect(() => {
     async function carregar() {
@@ -548,38 +566,17 @@ export default function LoczalizadorPage() {
     return { total, contatados }
   }, [servidores, filtroPeriodo])
 
-  // Filtros
-  const filtrados = useMemo(() => {
-    return servidores.filter(s => {
-      const termoBusca = busca.toLowerCase()
-      const matchBusca = !busca ||
-        s.nome.toLowerCase().includes(termoBusca) ||
-        s.cpf.includes(termoBusca) ||
-        s.orgao.toLowerCase().includes(termoBusca)
-      const matchMargem = filtroMargem === 'todos' || classifMargem(s) === filtroMargem
-      const matchContato = filtroContato === 'todos' || (filtroContato === 'contatado' ? s.contatado : !s.contatado)
-      const matchPer = matchPeriodo(s)
-      const matchStatus = filtroStatus === 'todos' || s.status_consulta === filtroStatus
-      return matchBusca && matchMargem && matchContato && matchPer && matchStatus
-    })
-  }, [servidores, busca, filtroMargem, filtroContato, filtroPeriodo])
 
-  // Reset página ao mudar filtros
-  useEffect(() => { setPagina(1) }, [busca, filtroMargem, filtroContato, filtroPeriodo, filtroStatus])
 
-  // Paginação
-  const totalPaginas = Math.ceil(filtrados.length / POR_PAGINA)
-  const filtradosPagina = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)
-
-  // Agrupa por órgão em TODOS os filtrados (não só da página atual)
+  // Agrupa por órgão
   const porOrgao = useMemo(() => {
     const mapa: Record<string, Servidor[]> = {}
-    filtrados.forEach(s => {
+    servidores.forEach(s => {
       if (!mapa[s.orgao]) mapa[s.orgao] = []
       mapa[s.orgao].push(s)
     })
     return Object.entries(mapa).sort(([a], [b]) => a.localeCompare(b))
-  }, [filtrados])
+  }, [servidores])
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950">
@@ -739,7 +736,7 @@ export default function LoczalizadorPage() {
           </div>
         ) : porOrgao.length === 0 ? (
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center">
-            <p className="text-zinc-400 text-sm">Nenhum resultado para &quot;{busca}&quot;</p>
+            <p className="text-zinc-400 text-sm">Nenhum servidor encontrado.</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -749,49 +746,6 @@ export default function LoczalizadorPage() {
           </div>
         )}
 
-        {/* Paginação */}
-        {totalPaginas > 1 && (
-          <div className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-3">
-            <p className="text-zinc-500 text-xs">
-              {(pagina - 1) * POR_PAGINA + 1}–{Math.min(pagina * POR_PAGINA, filtrados.length)} de {filtrados.length} servidores
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => { setPagina(p => Math.max(1, p - 1)); window.scrollTo(0, 0) }}
-                disabled={pagina === 1}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                ← Anterior
-              </button>
-              {Array.from({ length: totalPaginas }, (_, i) => i + 1)
-                .filter(p => p === 1 || p === totalPaginas || Math.abs(p - pagina) <= 1)
-                .reduce<(number | '...')[]>((acc, p, i, arr) => {
-                  if (i > 0 && typeof arr[i-1] === 'number' && (p as number) - (arr[i-1] as number) > 1) acc.push('...')
-                  acc.push(p)
-                  return acc
-                }, [])
-                .map((p, i) => p === '...' ? (
-                  <span key={`e${i}`} className="px-2 text-zinc-600 text-xs">…</span>
-                ) : (
-                  <button
-                    key={p}
-                    onClick={() => { setPagina(p as number); window.scrollTo(0, 0) }}
-                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${pagina === p ? 'bg-emerald-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-                  >
-                    {p}
-                  </button>
-                ))
-              }
-              <button
-                onClick={() => { setPagina(p => Math.min(totalPaginas, p + 1)); window.scrollTo(0, 0) }}
-                disabled={pagina === totalPaginas}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                Próxima →
-              </button>
-            </div>
-          </div>
-        )}
 
         </>)}
 

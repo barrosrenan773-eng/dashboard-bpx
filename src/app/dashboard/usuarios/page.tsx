@@ -53,6 +53,7 @@ const ABAS = [
   { key: 'contratos',   label: 'Contratos' },
   { key: 'caixa',       label: 'Caixa' },
   { key: 'relatorios',  label: 'Relatórios' },
+  { key: 'localizador', label: 'Servidores' },
   { key: 'usuarios',    label: 'Usuários' },
 ]
 

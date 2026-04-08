@@ -52,21 +52,37 @@ type OFXTransaction = {
   mes: string
 }
 
-type OFXCategoria = 'ignorar' | 'fixa' | 'variavel' | 'pix' | 'pessoal'
+type OFXCategoria = 'ignorar' | 'fixa' | 'variavel' | 'pix' | 'pessoal' | 'dept_pessoal' | 'comissao_corretor' | 'comissao_gerente' | 'marketing' | 'servico_terceirizado' | 'impostos' | 'taxas_bancarias' | 'compra_divida' | 'despesas_diversas' | 'devolucao_emprestimo'
 
 type Despesa = {
   id: number
   descricao: string
-  categoria: 'fixa' | 'variavel' | 'pix' | 'pessoal'
+  categoria: string
   valor: number
   mes: string
+  empresa: string
+  data?: string
   created_at: string
 }
+
+type Receita = {
+  id: number
+  descricao: string
+  categoria: string
+  valor: number
+  mes: string
+  empresa: string
+  created_at: string
+}
+
+const EMPRESAS = ['BPX', 'CCA1', 'CCA2'] as const
+type Empresa = typeof EMPRESAS[number]
 
 type AddingState = {
   categoria: string
   descricao: string
   valor: string
+  empresa: string
 } | null
 
 type EditingState = {
@@ -109,13 +125,22 @@ type ContaForm = {
 }
 
 const CONTA_CATEGORIAS = [
-  'fornecedores', 'aluguel', 'utilities', 'impostos', 'salarios',
-  'marketing', 'software', 'equipamentos', 'outros',
+  { key: 'dept_pessoal',         label: 'Departamento Pessoal' },
+  { key: 'comissao_corretor',    label: 'Comissão de Corretor' },
+  { key: 'comissao_gerente',     label: 'Comissão de Gerente' },
+  { key: 'marketing',            label: 'Marketing' },
+  { key: 'servico_terceirizado', label: 'Serviço Terceirizado' },
+  { key: 'impostos',             label: 'Impostos' },
+  { key: 'taxas_bancarias',      label: 'Taxas Bancárias' },
+  { key: 'despesas_diversas',    label: 'Despesas Diversas' },
+  { key: 'devolucao_emprestimo', label: 'Devolução de Empréstimos' },
+  { key: 'bonificacao',          label: 'Bonificação' },
+  { key: 'pl',                   label: 'PL' },
 ]
 
 const FORM_VAZIO: ContaForm = {
   tipo: 'unica',
-  descricao: '', fornecedor: '', categoria: 'outros', valor: '',
+  descricao: '', fornecedor: '', categoria: 'despesas_diversas', valor: '',
   data_vencimento: '', parcela_atual: '', total_parcelas: '',
   dia_vencimento: '10',
   mes_inicio: new Date().toISOString().slice(0, 7),
@@ -400,7 +425,7 @@ function ContasPagarModal({ onClose }: { onClose: () => void }) {
             <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}
               className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-orange-500">
               <option value="">Todas as categorias</option>
-              {CONTA_CATEGORIAS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+              {CONTA_CATEGORIAS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
             <button onClick={loadContas} className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-xs transition-colors">
               <RefreshCw className="w-3 h-3" /> Atualizar
@@ -446,7 +471,7 @@ function ContasPagarModal({ onClose }: { onClose: () => void }) {
               <div>
                 <label className="text-zinc-500 text-xs mb-1 block">Categoria</label>
                 <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls}>
-                  {CONTA_CATEGORIAS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                  {CONTA_CATEGORIAS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                 </select>
               </div>
               <div>
@@ -647,11 +672,31 @@ function formatMesLabel(mes: string): string {
 }
 
 const CATEGORIAS = [
-  { key: 'fixa', label: 'Despesas Fixas' },
+  { key: 'dept_pessoal',         label: 'Departamento Pessoal' },
+  { key: 'comissao_corretor',    label: 'Comissão de Corretor' },
+  { key: 'comissao_gerente',     label: 'Comissão de Gerente' },
+  { key: 'marketing',            label: 'Marketing' },
+  { key: 'servico_terceirizado', label: 'Serviço Terceirizado' },
+  { key: 'impostos',             label: 'Impostos' },
+  { key: 'taxas_bancarias',      label: 'Taxas Bancárias' },
+  { key: 'compra_divida',        label: 'Compra de Dívida' },
+  { key: 'despesas_diversas',    label: 'Despesas Diversas' },
+  { key: 'devolucao_emprestimo', label: 'Devolução de Empréstimos' },
+  { key: 'bonificacao',          label: 'Bonificação' },
+  { key: 'pl',                   label: 'PL' },
+  // legado
+  { key: 'fixa',     label: 'Despesas Fixas' },
   { key: 'variavel', label: 'Despesas Variáveis' },
-  { key: 'pix', label: 'Tarifas Pix' },
-  { key: 'pessoal', label: 'Despesas com Pessoal' },
-] as const
+  { key: 'pix',      label: 'Tarifas Pix' },
+  { key: 'pessoal',  label: 'Despesas com Pessoal' },
+]
+
+const CATEGORIAS_RECEITA = [
+  { key: 'emprestimo_divida', label: 'Empréstimo para Compra de Dívida' },
+  { key: 'comissao_banco',    label: 'Comissão de Banco' },
+  { key: 'taxa_servico',      label: 'Taxa de Serviço' },
+  { key: 'capital_giro',      label: 'Capital de Giro' },
+]
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
 
@@ -714,6 +759,10 @@ export default function FinanceiroPage() {
   const [showContasPagar, setShowContasPagar] = useState(false)
   const [mes, setMes] = useState(getCurrentMes)
   const [despesas, setDespesas] = useState<Despesa[]>([])
+  const [receitasManuais, setReceitasManuais] = useState<Receita[]>([])
+  const [addingReceita, setAddingReceita] = useState<AddingState>(null)
+  const [editingReceita, setEditingReceita] = useState<EditingState>(null)
+  const [expandedCatsReceita, setExpandedCatsReceita] = useState<Set<string>>(new Set())
   const [receita, setReceita] = useState(0)
   const [metaAdsSpend, setMetaAdsSpend] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
@@ -721,16 +770,31 @@ export default function FinanceiroPage() {
   const [editing, setEditing] = useState<EditingState>(null)
   const [saving, setSaving] = useState(false)
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
+  const [empresaFiltro, setEmpresaFiltro] = useState<Empresa | ''>('')
+
+  // Refs para scroll
+  const dreRef = useRef<HTMLDivElement>(null)
+  const historicoRef = useRef<HTMLDivElement>(null)
 
   // OFX
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [ofxTxs, setOfxTxs] = useState<OFXTransaction[]>([])
+  const [ofxEmpresas, setOfxEmpresas] = useState<Record<string, string>>({})
   const [ofxCats, setOfxCats] = useState<Record<string, OFXCategoria>>({})
   const [ofxDescricoes, setOfxDescricoes] = useState<Record<string, string>>({})
   const [ofxLoading, setOfxLoading] = useState(false)
   const [ofxError, setOfxError] = useState('')
+  const [ofxAviso, setOfxAviso] = useState('')
   const [ofxConciliando, setOfxConciliando] = useState(false)
+  const [ofxConciliandoFitid, setOfxConciliandoFitid] = useState<string | null>(null)
   const [ofxDone, setOfxDone] = useState(0)
+  const [historicoConciliacoes, setHistoricoConciliacoes] = useState<{id: string; created_at: string; mes_referencia: string; qtd_transacoes: number; valor_total: number; detalhes: {despesa_id?: number; descricao: string; categoria: string; valor: number; fitid?: string; tipo?: string; data?: string; mes?: string}[]}[]>([])
+  const [historicoExpanded, setHistoricoExpanded] = useState<Set<string>>(new Set())
+  const [histFiltro, setHistFiltro] = useState<'hoje' | 'periodo'>('hoje')
+  const [histInicio, setHistInicio] = useState(() => new Date().toISOString().slice(0, 10))
+  const [histFim, setHistFim] = useState(() => new Date().toISOString().slice(0, 10))
+  const [histPage, setHistPage] = useState(1)
+  const HIST_PER_PAGE = 15
 
   // Historical data for chart (last 6 months)
   const [histDespesas, setHistDespesas] = useState<Record<string, number>>({})
@@ -753,7 +817,7 @@ export default function FinanceiroPage() {
   async function loadContratos() {
     const r = await fetch('/api/contratos')
     const data = await r.json()
-    const total = Array.isArray(data) ? data.reduce((s: number, c: { taxa?: number }) => s + (c.taxa ?? 0), 0) : 0
+    const total = Array.isArray(data) ? data.filter((c: { status?: string }) => c.status === 'finalizado').reduce((s: number, c: { taxa?: number }) => s + (c.taxa ?? 0), 0) : 0
     setReceita(total)
   }
 
@@ -780,7 +844,7 @@ export default function FinanceiroPage() {
         fetch('/api/contratos'),
       ])
       const allDespesas: Despesa[] = dRes.ok ? await dRes.json() : []
-      const allContratos: { taxa?: number; created_at: string }[] = cRes.ok ? await cRes.json() : []
+      const allContratos: { taxa?: number; created_at: string; status?: string }[] = (cRes.ok ? await cRes.json() : []).filter((c: { status?: string }) => c.status === 'finalizado')
 
       const dMap: Record<string, number> = {}
       const rMap: Record<string, number> = {}
@@ -799,18 +863,66 @@ export default function FinanceiroPage() {
     }
   }
 
+  async function loadReceitas(m: string) {
+    const r = await fetch(`/api/receitas?mes=${m}`)
+    const data = await r.json()
+    setReceitasManuais(Array.isArray(data) ? data : [])
+  }
+
   async function load(m: string) {
     setLoading(true)
-    await Promise.all([loadDespesas(m), loadContratos(), loadMetaAds(m)])
+    await Promise.all([loadDespesas(m), loadContratos(), loadMetaAds(m), loadReceitas(m)])
     setLoading(false)
+  }
+
+  async function loadHistorico() {
+    const r = await fetch('/api/historico-conciliacoes')
+    const data = await r.json()
+    setHistoricoConciliacoes(Array.isArray(data) ? data : [])
   }
 
   useEffect(() => { load(mes) }, [mes])
   useEffect(() => { loadHistorical() }, [])
+  useEffect(() => { loadHistorico() }, [])
 
-  const totalDespesas = despesas.reduce((s, d) => s + Number(d.valor), 0) + (metaAdsSpend ?? 0)
-  const lucro = receita - totalDespesas
-  const margem = receita > 0 ? (lucro / receita) * 100 : 0
+  // Persiste estado OFX no sessionStorage para sobreviver a navegações
+  useEffect(() => {
+    if (ofxTxs.length > 0) {
+      sessionStorage.setItem('ofx_txs', JSON.stringify(ofxTxs))
+      sessionStorage.setItem('ofx_cats', JSON.stringify(ofxCats))
+      sessionStorage.setItem('ofx_descs', JSON.stringify(ofxDescricoes))
+      sessionStorage.setItem('ofx_emps', JSON.stringify(ofxEmpresas))
+    }
+  }, [ofxTxs, ofxCats, ofxDescricoes, ofxEmpresas])
+
+  // Restaura estado OFX ao montar
+  useEffect(() => {
+    try {
+      const txs = sessionStorage.getItem('ofx_txs')
+      if (txs) {
+        const parsed = JSON.parse(txs)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setOfxTxs(parsed)
+          const cats = sessionStorage.getItem('ofx_cats')
+          const descs = sessionStorage.getItem('ofx_descs')
+          const emps = sessionStorage.getItem('ofx_emps')
+          if (cats) setOfxCats(JSON.parse(cats))
+          if (descs) setOfxDescricoes(JSON.parse(descs))
+          if (emps) setOfxEmpresas(JSON.parse(emps))
+        }
+      }
+    } catch { /* silent */ }
+  }, [])
+
+  const despesasFiltradas = (empresaFiltro ? despesas.filter(d => d.empresa === empresaFiltro) : despesas)
+    .filter(d => d.categoria !== 'compra_divida')
+  const receitasFiltradas = empresaFiltro ? receitasManuais.filter(r => r.empresa === empresaFiltro) : receitasManuais
+  const receitaContratosF = empresaFiltro ? 0 : receita // contratos não têm empresa ainda
+  const totalDespesas = despesasFiltradas.reduce((s, d) => s + Number(d.valor), 0) + (empresaFiltro ? 0 : (metaAdsSpend ?? 0))
+  const totalReceitasManuais = receitasFiltradas.reduce((s, r) => s + Number(r.valor), 0)
+  const receitaTotal = receitaContratosF + totalReceitasManuais
+  const lucro = receitaTotal - totalDespesas
+  const margem = receitaTotal > 0 ? (lucro / receitaTotal) * 100 : 0
   const isPositive = lucro >= 0
 
   // ── Chart data ──
@@ -836,7 +948,7 @@ export default function FinanceiroPage() {
     await fetch('/api/despesas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ descricao: adding.descricao, categoria, valor: parseFloat(adding.valor) || 0, mes }),
+      body: JSON.stringify({ descricao: adding.descricao, categoria, valor: parseFloat(adding.valor) || 0, mes, empresa: adding.empresa || empresaFiltro || 'BPX' }),
     })
     setSaving(false)
     setAdding(null)
@@ -859,7 +971,46 @@ export default function FinanceiroPage() {
   async function handleDelete(id: number) {
     if (!confirm('Excluir esta despesa?')) return
     await fetch(`/api/despesas?id=${id}`, { method: 'DELETE' })
+    // also remove any historico_conciliacoes record that references this despesa
+    const linked = historicoConciliacoes.filter(h => h.detalhes?.some(d => d.despesa_id === id))
+    for (const h of linked) {
+      await fetch(`/api/historico-conciliacoes?id=${h.id}`, { method: 'DELETE' })
+    }
+    if (linked.length > 0) loadHistorico()
     loadDespesas(mes)
+  }
+
+  // ── CRUD Receitas ──
+  async function handleAddReceita(categoria: string) {
+    if (!addingReceita || saving || !addingReceita.descricao.trim()) return
+    setSaving(true)
+    await fetch('/api/receitas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ descricao: addingReceita.descricao, categoria, valor: parseFloat(addingReceita.valor) || 0, mes, empresa: addingReceita.empresa || empresaFiltro || 'BPX' }),
+    })
+    setSaving(false)
+    setAddingReceita(null)
+    loadReceitas(mes)
+  }
+
+  async function handleEditReceita() {
+    if (!editingReceita || saving) return
+    setSaving(true)
+    await fetch('/api/receitas', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editingReceita.id, descricao: editingReceita.descricao, valor: parseFloat(editingReceita.valor) || 0 }),
+    })
+    setSaving(false)
+    setEditingReceita(null)
+    loadReceitas(mes)
+  }
+
+  async function handleDeleteReceita(id: number) {
+    if (!confirm('Excluir esta receita?')) return
+    await fetch(`/api/receitas?id=${id}`, { method: 'DELETE' })
+    loadReceitas(mes)
   }
 
   // ── OFX ──
@@ -871,6 +1022,7 @@ export default function FinanceiroPage() {
     setOfxTxs([])
     setOfxCats({})
     setOfxDescricoes({})
+    setOfxEmpresas({})
     setOfxDone(0)
     const formData = new FormData()
     formData.append('file', file)
@@ -878,17 +1030,27 @@ export default function FinanceiroPage() {
       const res = await fetch('/api/ofx', { method: 'POST', body: formData })
       const json = await res.json()
       if (json.error) { setOfxError(json.error); setOfxLoading(false); return }
-      const txs: OFXTransaction[] = json.transactions ?? []
-      const filtered = txs.filter(t => t.mes === mes)
-      setOfxTxs(filtered)
+      const allTxs: OFXTransaction[] = json.transactions ?? []
+      // Filtra FITIDs já conciliados no histórico
+      const fitidsConciliados = new Set(
+        historicoConciliacoes.flatMap(h => (h.detalhes ?? []).map(d => d.fitid).filter(Boolean))
+      )
+      const txs = allTxs.filter(t => !fitidsConciliados.has(t.fitid))
+      const jaExistiam = allTxs.length - txs.length
+      if (jaExistiam > 0) setOfxAviso(`${jaExistiam} transação(ões) já conciliada(s) foram ocultadas automaticamente.`)
+      else setOfxAviso('')
+      setOfxTxs(txs)
       const cats: Record<string, OFXCategoria> = {}
       const descs: Record<string, string> = {}
-      filtered.forEach(t => {
+      const emps: Record<string, string> = {}
+      txs.forEach(t => {
         cats[t.fitid] = t.tipo === 'CREDIT' ? 'ignorar' : 'variavel'
         descs[t.fitid] = t.descricao
+        emps[t.fitid] = empresaFiltro || 'BPX'
       })
       setOfxCats(cats)
       setOfxDescricoes(descs)
+      setOfxEmpresas(emps)
     } catch (err) {
       setOfxError(String(err))
     }
@@ -910,11 +1072,81 @@ export default function FinanceiroPage() {
       count++
     }
     setOfxDone(count)
+    await fetch('/api/historico-conciliacoes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mes_referencia: mes,
+        qtd_transacoes: toCreate.length,
+        valor_total: toCreate.reduce((s, t) => s + t.valor, 0),
+        detalhes: toCreate.map(t => ({ descricao: ofxDescricoes[t.fitid] || t.descricao, categoria: ofxCats[t.fitid], valor: t.valor })),
+      }),
+    })
+    loadHistorico()
     setOfxTxs([])
     setOfxCats({})
     setOfxDescricoes({})
+    setOfxEmpresas({})
     setOfxConciliando(false)
     loadDespesas(mes)
+  }
+
+  async function handleConciliarUma(t: OFXTransaction) {
+    const cat = ofxCats[t.fitid]
+    if (!cat || cat === 'ignorar') return
+    setOfxConciliandoFitid(t.fitid)
+    try {
+      // Entradas (CREDIT) ficam só no histórico — não vão pro DRE
+      let despesaCriada: Despesa | null = null
+      if (t.tipo !== 'CREDIT') {
+        const dRes = await fetch('/api/despesas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ descricao: ofxDescricoes[t.fitid] || t.descricao, categoria: cat, valor: t.valor, mes, empresa: ofxEmpresas[t.fitid] || 'BPX', data: t.data || null }),
+        })
+        const despesaJson = await dRes.json()
+        if (!dRes.ok) {
+          setOfxAviso(`Erro ao salvar despesa: ${despesaJson?.error ?? dRes.status}`)
+          return
+        }
+        despesaCriada = despesaJson
+        if (despesaCriada) setDespesas(prev => [...prev, despesaCriada!])
+      }
+      await fetch('/api/historico-conciliacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mes_referencia: mes,
+          qtd_transacoes: 1,
+          valor_total: t.valor,
+          detalhes: [{
+            despesa_id: despesaCriada?.id ?? null,
+            descricao: ofxDescricoes[t.fitid] || t.descricao,
+            categoria: cat,
+            valor: t.valor,
+            fitid: t.fitid,
+            tipo: t.tipo,
+            data: t.data,
+            mes: t.mes,
+          }],
+        }),
+      })
+      setOfxTxs(prev => {
+        const restantes = prev.filter(x => x.fitid !== t.fitid)
+        if (restantes.length === 0) {
+          sessionStorage.removeItem('ofx_txs')
+          sessionStorage.removeItem('ofx_cats')
+          sessionStorage.removeItem('ofx_descs')
+          sessionStorage.removeItem('ofx_emps')
+        }
+        return restantes
+      })
+      setOfxDone(prev => prev + 1)
+      loadDespesas(mes)
+      loadHistorico()
+    } finally {
+      setOfxConciliandoFitid(null)
+    }
   }
 
   const ofxParaConciliar = ofxTxs.filter(t => ofxCats[t.fitid] !== 'ignorar').length
@@ -945,6 +1177,17 @@ export default function FinanceiroPage() {
             <ChevronRight className="w-4 h-4" />
           </button>
           {loading && <span className="text-zinc-500 text-xs animate-pulse">Carregando...</span>}
+          <div className="flex items-center gap-1 ml-4">
+            {(['', ...EMPRESAS] as const).map(e => (
+              <button
+                key={e || 'todas'}
+                onClick={() => setEmpresaFiltro(e as Empresa | '')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${empresaFiltro === e ? 'bg-orange-500 border-orange-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-orange-500/50 hover:text-orange-300'}`}
+              >
+                {e || 'Todas'}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => setShowContasPagar(true)}
             className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-orange-500/50 hover:bg-orange-500/10 text-zinc-400 hover:text-orange-400 text-sm font-medium transition-all"
@@ -980,8 +1223,8 @@ export default function FinanceiroPage() {
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           <KpiCard
             label={KPI_LABELS.receita}
-            value={formatCurrency(receita)}
-            sub="soma das taxas de contratos"
+            value={formatCurrency(receitaTotal)}
+            sub={`contratos + ${receitasManuais.length} receita${receitasManuais.length !== 1 ? 's' : ''} manual${receitasManuais.length !== 1 ? 'is' : ''}`}
             icon={DollarSign}
             color="#10B981"
             colorClass="text-emerald-400"
@@ -1014,31 +1257,6 @@ export default function FinanceiroPage() {
             colorClass={isPositive ? 'text-emerald-400' : 'text-red-400'}
             bgClass={isPositive ? 'bg-emerald-500/10' : 'bg-red-500/10'}
           />
-        </div>
-
-        {/* ── ESTRUTURA FINANCEIRA ── */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <h3 className="text-white font-semibold text-sm mb-5">Estrutura Financeira — {formatMesLabel(mes)}</h3>
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { label: KPI_LABELS.receita, value: receita, bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400' },
-              { label: KPI_LABELS.despesas, value: totalDespesas, bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
-              {
-                label: KPI_LABELS.lucro, value: lucro,
-                bg: isPositive ? 'bg-violet-500/10' : 'bg-red-500/10',
-                border: isPositive ? 'border-violet-500/30' : 'border-red-500/30',
-                text: isPositive ? 'text-violet-400' : 'text-red-400',
-              },
-            ].map((item, i, arr) => (
-              <div key={item.label} className="flex items-center gap-2">
-                <div className={`${item.bg} border ${item.border} rounded-xl px-4 py-3 text-center min-w-[120px]`}>
-                  <p className="text-zinc-500 text-xs mb-1">{item.label}</p>
-                  <p className={`font-bold text-sm ${item.text}`}>{formatCurrency(item.value)}</p>
-                </div>
-                {i < arr.length - 1 && <ArrowRight className="w-4 h-4 text-zinc-600 shrink-0" />}
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* ── GRÁFICO ── */}
@@ -1080,10 +1298,10 @@ export default function FinanceiroPage() {
         </div>
 
         {/* ── DRE ── */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+        <div ref={dreRef} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-zinc-800">
-            <h3 className="text-white font-semibold text-base">DRE — Demonstrativo de Resultado</h3>
-            <p className="text-zinc-500 text-xs mt-0.5">{formatMesLabel(mes)}</p>
+            <h3 className="text-white font-semibold text-base">DRE — {formatMesLabel(mes)}</h3>
+            <p className="text-zinc-500 text-xs mt-0.5">Demonstrativo de Resultado do Exercício</p>
           </div>
 
           {loading ? (
@@ -1093,145 +1311,72 @@ export default function FinanceiroPage() {
 
               {/* RECEITAS */}
               <div>
-                <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">Receitas</p>
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-zinc-300 text-sm">Taxas de Contratos</span>
-                  <span className="text-white font-medium text-sm">{formatCurrency(receita)}</span>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest">Receitas</p>
+                  <span className="text-emerald-400 font-bold text-sm">{formatCurrency(receitaTotal)}</span>
                 </div>
-                <div className="border-t border-zinc-700 mt-3 pt-3 flex items-center justify-between">
-                  <span className="text-zinc-400 text-sm font-semibold">Total Receitas</span>
-                  <span className="text-emerald-400 font-bold text-sm">{formatCurrency(receita)}</span>
-                </div>
-              </div>
-
-              {/* DESPESAS */}
-              <div>
-                <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">Despesas</p>
-
-                {metaAdsSpend !== null && (
-                  <div className="mb-2">
-                    <button
-                      onClick={() => toggleCat('__marketing__')}
-                      className="w-full flex items-center justify-between py-2 hover:bg-zinc-800/40 rounded-lg px-2 -mx-2 transition-colors"
-                    >
-                      <span className="flex items-center gap-2 text-zinc-300 text-sm font-semibold">
-                        Marketing
-                        <span className="text-xs bg-blue-500/15 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-normal">auto</span>
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <span className="text-zinc-400 text-sm font-semibold">{formatCurrency(metaAdsSpend)}</span>
-                        {expandedCats.has('__marketing__') ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />}
-                      </span>
-                    </button>
-                    {expandedCats.has('__marketing__') && (
-                      <div className="ml-4 mt-1">
-                        <div className="flex items-center justify-between py-1.5">
-                          <span className="text-zinc-500 text-xs">Facebook Ads</span>
-                          <span className="text-zinc-400 text-xs">{formatCurrency(metaAdsSpend)}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="space-y-1">
-                  {CATEGORIAS.map(({ key, label }) => {
-                    const items = despesas.filter(d => d.categoria === key)
-                    const subtotal = items.reduce((s, d) => s + Number(d.valor), 0)
-                    const isExpanded = expandedCats.has(key)
-                    const isAddingThis = adding?.categoria === key
-
+                <div className="space-y-0.5">
+                  {receitaContratosF > 0 && (
+                    <div className="flex items-center justify-between py-1.5 px-2">
+                      <span className="text-zinc-400 text-sm">Taxas de Contratos</span>
+                      <span className="text-zinc-300 text-sm font-medium">{formatCurrency(receitaContratosF)}</span>
+                    </div>
+                  )}
+                  {CATEGORIAS_RECEITA.map(({ key, label }) => {
+                    const items = receitasFiltradas.filter(r => r.categoria === key)
+                    const subtotal = items.reduce((s, r) => s + Number(r.valor), 0)
+                    const isExp = expandedCatsReceita.has(key)
+                    const isAddingThis = addingReceita?.categoria === key
                     return (
                       <div key={key}>
                         <button
-                          onClick={() => { toggleCat(key); setAdding(null) }}
-                          className="w-full flex items-center justify-between py-2 hover:bg-zinc-800/40 rounded-lg px-2 -mx-2 transition-colors"
+                          onClick={() => { setExpandedCatsReceita(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n }); setAddingReceita(null) }}
+                          className="w-full flex items-center justify-between py-1.5 hover:bg-zinc-800/40 rounded-lg px-2 transition-colors"
                         >
                           <span className="flex items-center gap-2">
-                            <span className="text-zinc-300 text-sm font-semibold">{label}</span>
-                            {items.length > 0 && (
-                              <span className="text-zinc-600 text-xs">{items.length} item{items.length > 1 ? 's' : ''}</span>
-                            )}
+                            <span className={`text-sm ${subtotal > 0 ? 'text-zinc-300' : 'text-zinc-600'}`}>{label}</span>
+                            {items.length > 0 && <span className="text-zinc-600 text-xs">{items.length}</span>}
                           </span>
                           <span className="flex items-center gap-2">
-                            <span className="text-zinc-400 text-sm font-semibold">{formatCurrency(subtotal)}</span>
-                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />}
+                            <span className={`text-sm font-medium ${subtotal > 0 ? 'text-zinc-300' : 'text-zinc-700'}`}>{formatCurrency(subtotal)}</span>
+                            {isExp ? <ChevronUp className="w-3 h-3 text-zinc-600" /> : <ChevronDown className="w-3 h-3 text-zinc-600" />}
                           </span>
                         </button>
-
-                        {isExpanded && (
-                          <div className="ml-4 space-y-1 mt-1 mb-2">
-                            {items.map(d => (
-                              <div key={d.id} className="flex items-center justify-between py-1.5 group">
-                                {editing?.id === d.id ? (
+                        {isExp && (
+                          <div className="ml-4 space-y-0.5 mt-1 mb-2">
+                            {items.map(r => (
+                              <div key={r.id} className="flex items-center justify-between py-1 group">
+                                {editingReceita?.id === r.id ? (
                                   <div className="flex items-center gap-2 flex-1">
-                                    <input
-                                      value={editing.descricao}
-                                      onChange={e => setEditing(s => s ? { ...s, descricao: e.target.value } : s)}
-                                      className="flex-1 bg-zinc-800 border border-zinc-700 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500"
-                                    />
-                                    <input
-                                      type="number"
-                                      value={editing.valor}
-                                      onChange={e => setEditing(s => s ? { ...s, valor: e.target.value } : s)}
-                                      className="w-24 bg-zinc-800 border border-zinc-700 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500"
-                                    />
-                                    <button onClick={handleEdit} disabled={saving} className="text-emerald-400 hover:text-emerald-300 transition-colors">
-                                      <Check className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button onClick={() => setEditing(null)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
+                                    <input value={editingReceita.descricao} onChange={e => setEditingReceita(s => s ? { ...s, descricao: e.target.value } : s)} className="flex-1 bg-zinc-800 border border-zinc-700 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" />
+                                    <input type="number" value={editingReceita.valor} onChange={e => setEditingReceita(s => s ? { ...s, valor: e.target.value } : s)} className="w-24 bg-zinc-800 border border-zinc-700 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" />
+                                    <button onClick={handleEditReceita} disabled={saving} className="text-emerald-400 hover:text-emerald-300"><Check className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => setEditingReceita(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
                                   </div>
                                 ) : (
                                   <>
-                                    <span className="text-zinc-400 text-sm flex-1">{d.descricao}</span>
-                                    <div className="flex items-center gap-3">
-                                      <span className="text-zinc-300 text-sm font-medium">{formatCurrency(Number(d.valor))}</span>
-                                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => setEditing({ id: d.id, descricao: d.descricao, valor: String(d.valor) })} className="text-zinc-500 hover:text-white transition-colors">
-                                          <Pencil className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button onClick={() => handleDelete(d.id)} className="text-zinc-500 hover:text-red-400 transition-colors">
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                    <span className="text-zinc-500 text-xs flex-1">{r.descricao}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-zinc-400 text-xs font-medium">{formatCurrency(Number(r.valor))}</span>
+                                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => setEditingReceita({ id: r.id, descricao: r.descricao, valor: String(r.valor) })} className="text-zinc-600 hover:text-white"><Pencil className="w-3 h-3" /></button>
+                                        <button onClick={() => handleDeleteReceita(r.id)} className="text-zinc-600 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
                                       </div>
                                     </div>
                                   </>
                                 )}
                               </div>
                             ))}
-
                             {isAddingThis ? (
-                              <div className="flex items-center gap-2 py-1.5">
-                                <input
-                                  autoFocus
-                                  value={adding.descricao}
-                                  onChange={e => setAdding(s => s ? { ...s, descricao: e.target.value } : s)}
-                                  placeholder="Descrição"
-                                  className="flex-1 bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500"
-                                />
-                                <input
-                                  type="number"
-                                  value={adding.valor}
-                                  onChange={e => setAdding(s => s ? { ...s, valor: e.target.value } : s)}
-                                  placeholder="0,00"
-                                  className="w-24 bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500"
-                                />
-                                <button onClick={() => handleAdd(key)} disabled={saving} className="text-emerald-400 hover:text-emerald-300 transition-colors">
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => setAdding(null)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
+                              <div className="flex items-center gap-2 py-1">
+                                <input autoFocus value={addingReceita.descricao} onChange={e => setAddingReceita(s => s ? { ...s, descricao: e.target.value } : s)} placeholder="Descrição" className="flex-1 bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" />
+                                <input type="number" value={addingReceita.valor} onChange={e => setAddingReceita(s => s ? { ...s, valor: e.target.value } : s)} placeholder="0,00" className="w-24 bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" />
+                                <button onClick={() => handleAddReceita(key)} disabled={saving} className="text-emerald-400 hover:text-emerald-300"><Check className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => setAddingReceita(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
                               </div>
                             ) : (
-                              <button
-                                onClick={() => setAdding({ categoria: key, descricao: '', valor: '' })}
-                                className="flex items-center gap-1.5 text-zinc-600 hover:text-emerald-400 text-xs transition-colors py-1"
-                              >
-                                <Plus className="w-3 h-3" />
-                                Adicionar
+                              <button onClick={() => setAddingReceita({ categoria: key, descricao: '', valor: '', empresa: empresaFiltro || 'BPX' })} className="flex items-center gap-1.5 text-zinc-600 hover:text-emerald-400 text-xs transition-colors py-1">
+                                <Plus className="w-3 h-3" />Adicionar
                               </button>
                             )}
                           </div>
@@ -1240,25 +1385,154 @@ export default function FinanceiroPage() {
                     )
                   })}
                 </div>
+              </div>
 
-                <div className="border-t border-zinc-700 mt-4 pt-3 flex items-center justify-between">
-                  <span className="text-zinc-400 text-sm font-semibold">Total Despesas</span>
+              {/* DESPESAS POR CATEGORIA */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest">Despesas por Categoria</p>
                   <span className="text-red-400 font-bold text-sm">{formatCurrency(totalDespesas)}</span>
+                </div>
+
+                {/* Barra visual empilhada */}
+                {totalDespesas > 0 && (() => {
+                  const BAR_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#6366f1','#a855f7','#ec4899','#14b8a6','#f59e0b','#84cc16','#3b82f6']
+                  const cats = [
+                    ...(metaAdsSpend && !empresaFiltro ? [{ key: '__marketing__', valor: metaAdsSpend }] : []),
+                    ...CATEGORIAS.map(({ key }) => ({ key, valor: despesasFiltradas.filter(d => d.categoria === key).reduce((s, d) => s + Number(d.valor), 0) })).filter(c => c.valor > 0),
+                  ].sort((a, b) => b.valor - a.valor)
+                  return (
+                    <div className="flex h-3 rounded-full overflow-hidden mb-5">
+                      {cats.map((c, i) => (
+                        <div key={c.key} style={{ width: `${(c.valor / totalDespesas) * 100}%`, background: BAR_COLORS[i % BAR_COLORS.length] }} />
+                      ))}
+                    </div>
+                  )
+                })()}
+
+                <div className="space-y-1">
+                  {/* Marketing auto */}
+                  {metaAdsSpend !== null && !empresaFiltro && (
+                    <div>
+                      <button onClick={() => toggleCat('__marketing__')} className="w-full flex items-center gap-3 py-2 hover:bg-zinc-800/40 rounded-lg px-2 transition-colors">
+                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: '#f97316' }} />
+                        <span className="text-zinc-300 text-sm flex-1 text-left">Marketing</span>
+                        <span className="text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full">auto</span>
+                        <div className="w-24 mx-2 bg-zinc-800 rounded-full h-1.5">
+                          <div className="h-1.5 rounded-full" style={{ width: `${Math.min((metaAdsSpend / totalDespesas) * 100, 100)}%`, background: '#f97316', opacity: 0.7 }} />
+                        </div>
+                        <span className="text-zinc-500 text-xs w-10 text-right">{totalDespesas > 0 ? ((metaAdsSpend / totalDespesas) * 100).toFixed(0) : 0}%</span>
+                        <span className="text-zinc-300 text-sm font-medium w-28 text-right">{formatCurrency(metaAdsSpend)}</span>
+                        {expandedCats.has('__marketing__') ? <ChevronUp className="w-3.5 h-3.5 text-zinc-600" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-600" />}
+                      </button>
+                      {expandedCats.has('__marketing__') && (
+                        <div className="ml-8 py-1 mb-1">
+                          <div className="flex items-center justify-between py-1">
+                            <span className="text-zinc-500 text-xs">Facebook Ads</span>
+                            <span className="text-zinc-400 text-xs">{formatCurrency(metaAdsSpend)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Categorias DRE ordenadas por valor */}
+                  {(() => {
+                    const BAR_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#6366f1','#a855f7','#ec4899','#14b8a6','#f59e0b','#84cc16','#3b82f6']
+                    const colorOffset = (metaAdsSpend && !empresaFiltro) ? 1 : 0
+                    return [...CATEGORIAS]
+                      .map(({ key, label }) => ({
+                        key, label,
+                        items: despesasFiltradas.filter(d => d.categoria === key),
+                        subtotal: despesasFiltradas.filter(d => d.categoria === key).reduce((s, d) => s + Number(d.valor), 0),
+                      }))
+                      .sort((a, b) => b.subtotal - a.subtotal)
+                      .map(({ key, label, items, subtotal }, idx) => {
+                        const isExpanded = expandedCats.has(key)
+                        const isAddingThis = adding?.categoria === key
+                        const pct = totalDespesas > 0 ? (subtotal / totalDespesas) * 100 : 0
+                        const color = BAR_COLORS[(idx + colorOffset) % BAR_COLORS.length]
+                        return (
+                          <div key={key}>
+                            <button
+                              onClick={() => { toggleCat(key); setAdding(null) }}
+                              className={`w-full flex items-center gap-3 py-2 hover:bg-zinc-800/40 rounded-lg px-2 transition-colors ${subtotal === 0 ? 'opacity-25' : ''}`}
+                            >
+                              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                              <span className="text-zinc-300 text-sm flex-1 text-left">{label}</span>
+                              {items.length > 0 && <span className="text-zinc-600 text-xs">{items.length}</span>}
+                              <div className="w-24 mx-2 bg-zinc-800 rounded-full h-1.5">
+                                <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: color, opacity: 0.7 }} />
+                              </div>
+                              <span className="text-zinc-500 text-xs w-10 text-right">{pct.toFixed(0)}%</span>
+                              <span className={`text-sm font-medium w-28 text-right ${subtotal > 0 ? 'text-zinc-300' : 'text-zinc-700'}`}>{formatCurrency(subtotal)}</span>
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-600" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-600" />}
+                            </button>
+                            {isExpanded && (
+                              <div className="ml-8 space-y-0.5 mt-1 mb-2">
+                                {items.map(d => (
+                                  <div key={d.id} className="flex items-center justify-between py-1 group">
+                                    {editing?.id === d.id ? (
+                                      <div className="flex items-center gap-2 flex-1">
+                                        <input value={editing.descricao} onChange={e => setEditing(s => s ? { ...s, descricao: e.target.value } : s)} className="flex-1 bg-zinc-800 border border-zinc-700 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" />
+                                        <input type="number" value={editing.valor} onChange={e => setEditing(s => s ? { ...s, valor: e.target.value } : s)} className="w-24 bg-zinc-800 border border-zinc-700 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" />
+                                        <button onClick={handleEdit} disabled={saving} className="text-emerald-400 hover:text-emerald-300"><Check className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => setEditing(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <span className="text-zinc-500 text-xs flex-1">
+                                          {d.data && <span className="text-zinc-600 mr-1">{d.data.slice(8,10)}/{d.data.slice(5,7)}</span>}
+                                          {d.descricao}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-zinc-400 text-xs font-medium">{formatCurrency(Number(d.valor))}</span>
+                                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => setEditing({ id: d.id, descricao: d.descricao, valor: String(d.valor) })} className="text-zinc-600 hover:text-white"><Pencil className="w-3 h-3" /></button>
+                                            <button onClick={() => handleDelete(d.id)} className="text-zinc-600 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                                          </div>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                ))}
+                                {isAddingThis ? (
+                                  <div className="flex items-center gap-2 py-1">
+                                    <input autoFocus value={adding.descricao} onChange={e => setAdding(s => s ? { ...s, descricao: e.target.value } : s)} placeholder="Descrição" className="flex-1 bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" />
+                                    <input type="number" value={adding.valor} onChange={e => setAdding(s => s ? { ...s, valor: e.target.value } : s)} placeholder="0,00" className="w-24 bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" />
+                                    <button onClick={() => handleAdd(key)} disabled={saving} className="text-emerald-400 hover:text-emerald-300"><Check className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => setAdding(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => setAdding({ categoria: key, descricao: '', valor: '', empresa: empresaFiltro || 'BPX' })} className="flex items-center gap-1.5 text-zinc-600 hover:text-emerald-400 text-xs transition-colors py-1">
+                                    <Plus className="w-3 h-3" />Adicionar
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                  })()}
                 </div>
               </div>
 
               {/* RESULTADO */}
-              <div>
-                <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">Resultado</p>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-zinc-300 text-sm">Lucro Líquido</span>
-                    <span className={`font-bold text-sm ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(lucro)}</span>
+              <div className="border-t border-zinc-800 pt-4 space-y-1">
+                <div className="flex items-center justify-between py-1.5 px-2">
+                  <span className="text-zinc-400 text-sm">Total Receitas</span>
+                  <span className="text-emerald-400 font-semibold text-sm">{formatCurrency(receitaTotal)}</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5 px-2">
+                  <span className="text-zinc-400 text-sm">Total Despesas</span>
+                  <span className="text-red-400 font-semibold text-sm">{formatCurrency(totalDespesas)}</span>
+                </div>
+                <div className={`flex items-center justify-between py-3 px-4 rounded-xl mt-2 ${isPositive ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-white font-bold text-base">Lucro Líquido</span>
+                    <span className="text-zinc-500 text-xs">margem {margem.toFixed(1).replace('.', ',')}%</span>
                   </div>
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-zinc-300 text-sm">Margem</span>
-                    <span className={`font-bold text-sm ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>{margem.toFixed(1).replace('.', ',')}%</span>
-                  </div>
+                  <span className={`font-bold text-lg ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(lucro)}</span>
                 </div>
               </div>
 
@@ -1294,7 +1568,7 @@ export default function FinanceiroPage() {
         </div>
 
         {/* ── CONCILIAÇÃO BANCÁRIA OFX ── */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+        <div data-ofx-section className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
             <div>
               <h3 className="text-white font-semibold text-base flex items-center gap-2">
@@ -1325,6 +1599,12 @@ export default function FinanceiroPage() {
               {ofxError}
             </div>
           )}
+          {ofxAviso && (
+            <div className="px-6 py-4 flex items-center gap-2 text-yellow-400 text-sm bg-yellow-500/5 border-b border-yellow-500/20">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {ofxAviso}
+            </div>
+          )}
 
           {ofxTxs.length > 0 ? (
             <div className="p-6">
@@ -1334,15 +1614,8 @@ export default function FinanceiroPage() {
                   {ofxParaConciliar > 0 && <span className="text-emerald-400"> · {ofxParaConciliar} serão lançadas</span>}
                 </p>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => { setOfxTxs([]); setOfxCats({}); setOfxDescricoes({}) }} className="text-zinc-500 hover:text-zinc-300 text-xs transition-colors">
+                  <button onClick={() => { setOfxTxs([]); setOfxCats({}); setOfxDescricoes({}); setOfxEmpresas({}); setOfxAviso(''); sessionStorage.removeItem('ofx_txs'); sessionStorage.removeItem('ofx_cats'); sessionStorage.removeItem('ofx_descs'); sessionStorage.removeItem('ofx_emps') }} className="text-zinc-500 hover:text-zinc-300 text-xs transition-colors">
                     Cancelar
-                  </button>
-                  <button
-                    onClick={handleConciliar}
-                    disabled={ofxConciliando || ofxParaConciliar === 0}
-                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
-                  >
-                    {ofxConciliando ? 'Lançando...' : `Lançar ${ofxParaConciliar} no DRE`}
                   </button>
                 </div>
               </div>
@@ -1361,6 +1634,8 @@ export default function FinanceiroPage() {
                       <th className="text-zinc-500 text-xs font-medium py-2 px-2 whitespace-nowrap">Tipo</th>
                       <th className="text-zinc-500 text-xs font-medium py-2 px-2 whitespace-nowrap text-right">Valor</th>
                       <th className="text-zinc-500 text-xs font-medium py-2 px-2 whitespace-nowrap">Categoria DRE</th>
+                      <th className="text-zinc-500 text-xs font-medium py-2 px-2 whitespace-nowrap">Empresa</th>
+                      <th className="text-zinc-500 text-xs font-medium py-2 px-2 whitespace-nowrap"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/50">
@@ -1374,8 +1649,7 @@ export default function FinanceiroPage() {
                             <input
                               value={ofxDescricoes[t.fitid] ?? t.descricao}
                               onChange={e => setOfxDescricoes(prev => ({ ...prev, [t.fitid]: e.target.value }))}
-                              disabled={isIgnored}
-                              className="w-full bg-transparent text-zinc-300 text-xs focus:outline-none focus:text-white disabled:text-zinc-600 border-b border-transparent focus:border-zinc-600 transition-colors"
+                              className="w-full bg-transparent text-zinc-300 text-xs focus:outline-none focus:text-white border-b border-transparent focus:border-zinc-600 transition-colors"
                             />
                           </td>
                           <td className="py-2 px-2 whitespace-nowrap">
@@ -1395,11 +1669,32 @@ export default function FinanceiroPage() {
                               className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded px-2 py-1 focus:outline-none focus:border-emerald-500"
                             >
                               <option value="ignorar">Ignorar</option>
-                              <option value="fixa">Despesas Fixas</option>
-                              <option value="variavel">Despesas Variáveis</option>
-                              <option value="pix">Tarifas Pix</option>
-                              <option value="pessoal">Despesas com Pessoal</option>
+                              {CATEGORIAS.filter(c => !['fixa','variavel','pix','pessoal'].includes(c.key)).map(c => (
+                                <option key={c.key} value={c.key}>{c.label}</option>
+                              ))}
                             </select>
+                          </td>
+                          <td className="py-2 px-2">
+                            <select
+                              value={ofxEmpresas[t.fitid] ?? empresaFiltro ?? 'BPX'}
+                              onChange={e => setOfxEmpresas(prev => ({ ...prev, [t.fitid]: e.target.value }))}
+                              disabled={isIgnored}
+                              className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded px-2 py-1 focus:outline-none focus:border-emerald-500 disabled:opacity-40"
+                            >
+                              {EMPRESAS.map(emp => (
+                                <option key={emp} value={emp}>{emp}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-2 px-2">
+                            <button
+                              onClick={() => handleConciliarUma(t)}
+                              disabled={isIgnored || ofxConciliandoFitid === t.fitid}
+                              className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap"
+                            >
+                              <Check className="w-3 h-3" />
+                              Conciliar
+                            </button>
                           </td>
                         </tr>
                       )
@@ -1416,6 +1711,228 @@ export default function FinanceiroPage() {
             </div>
           )}
         </div>
+
+        {/* ── HISTÓRICO DE CONCILIAÇÕES ── */}
+        {(() => {
+          const hoje = new Date().toISOString().slice(0, 10)
+          const histFiltrados = historicoConciliacoes.filter(h => {
+            const dia = h.created_at.slice(0, 10)
+            if (histFiltro === 'hoje') return dia === hoje
+            return dia >= histInicio && dia <= histFim
+          })
+          const histTotal = histFiltrados.length
+          const histPages = Math.max(1, Math.ceil(histTotal / HIST_PER_PAGE))
+          const histPagina = histFiltrados.slice((histPage - 1) * HIST_PER_PAGE, histPage * HIST_PER_PAGE)
+          return (
+            <div ref={historicoRef} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-zinc-800">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <h3 className="text-white font-semibold text-base flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-zinc-400" />
+                      Histórico de Conciliações
+                    </h3>
+                    <p className="text-zinc-500 text-xs mt-0.5">Registro das conciliações OFX realizadas</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => { setHistFiltro('hoje'); setHistPage(1) }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${histFiltro === 'hoje' ? 'bg-orange-500 border-orange-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-orange-500/50 hover:text-orange-300'}`}
+                    >
+                      Hoje
+                    </button>
+                    <button
+                      onClick={() => { setHistFiltro('periodo'); setHistPage(1) }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${histFiltro === 'periodo' ? 'bg-orange-500 border-orange-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-orange-500/50 hover:text-orange-300'}`}
+                    >
+                      Por período
+                    </button>
+                    {histFiltro === 'periodo' && (
+                      <>
+                        <input
+                          type="date"
+                          value={histInicio}
+                          onChange={e => { setHistInicio(e.target.value); setHistPage(1) }}
+                          className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-orange-500"
+                        />
+                        <span className="text-zinc-600 text-xs">até</span>
+                        <input
+                          type="date"
+                          value={histFim}
+                          onChange={e => { setHistFim(e.target.value); setHistPage(1) }}
+                          className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-orange-500"
+                        />
+                      </>
+                    )}
+                    {histTotal > 0 && (
+                      <span className="text-zinc-500 text-xs ml-1">{histTotal} registro{histTotal !== 1 ? 's' : ''}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {histPagina.length === 0 ? (
+                <div className="px-6 py-8 text-center">
+                  <Clock className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
+                  <p className="text-zinc-500 text-sm">
+                    {histFiltro === 'hoje' ? 'Nenhuma conciliação realizada hoje' : 'Nenhuma conciliação no período selecionado'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-zinc-800 text-left">
+                          <th className="text-zinc-500 text-xs font-medium py-3 px-4 whitespace-nowrap">Data/hora</th>
+                          <th className="text-zinc-500 text-xs font-medium py-3 px-4 whitespace-nowrap">Mês ref.</th>
+                          <th className="text-zinc-500 text-xs font-medium py-3 px-4 whitespace-nowrap text-center">Qtd</th>
+                          <th className="text-zinc-500 text-xs font-medium py-3 px-4 whitespace-nowrap text-right">Valor</th>
+                          <th className="text-zinc-500 text-xs font-medium py-3 px-4 whitespace-nowrap text-center">Detalhes</th>
+                          <th className="text-zinc-500 text-xs font-medium py-3 px-4 whitespace-nowrap"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/50">
+                        {histPagina.map(h => {
+                          const isExpanded = historicoExpanded.has(h.id)
+                          // Usa a data do extrato OFX se disponível, senão a data da conciliação
+                          const dataExtrato = h.detalhes?.[0]?.data
+                          const dataBase = dataExtrato ? dataExtrato + 'T12:00:00' : h.created_at
+                          const dataFormatada = dataExtrato
+                            ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(dataBase))
+                            : new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(dataBase))
+                          const [ano, mesNum] = h.mes_referencia.split('-')
+                          const mesLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
+                            .format(new Date(Number(ano), Number(mesNum) - 1, 1))
+                          return (
+                            <>
+                              <tr key={h.id} className="hover:bg-zinc-800/30 transition-colors">
+                                <td className="py-3 px-4 text-zinc-400 text-xs whitespace-nowrap">{dataFormatada}</td>
+                                <td className="py-3 px-4 text-zinc-300 text-xs capitalize whitespace-nowrap">{mesLabel}</td>
+                                <td className="py-3 px-4 text-zinc-300 text-xs text-center">{h.qtd_transacoes}</td>
+                                <td className="py-3 px-4 text-white text-xs font-semibold text-right whitespace-nowrap">{formatCurrency(h.valor_total)}</td>
+                                <td className="py-3 px-4 text-center">
+                                  <button
+                                    onClick={() => setHistoricoExpanded(prev => { const n = new Set(prev); n.has(h.id) ? n.delete(h.id) : n.add(h.id); return n })}
+                                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                  >
+                                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                  </button>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <button
+                                    onClick={async () => {
+                                      for (const d of h.detalhes ?? []) {
+                                        if (d.despesa_id) await fetch(`/api/despesas?id=${d.despesa_id}`, { method: 'DELETE' })
+                                      }
+                                      await fetch(`/api/historico-conciliacoes?id=${h.id}`, { method: 'DELETE' })
+                                      const detalhes = h.detalhes ?? []
+                                      const txsRestauradas: OFXTransaction[] = detalhes.map((d, i) => ({
+                                        fitid: d.fitid || `restored_${h.id}_${i}`,
+                                        tipo: d.tipo ?? 'DEBIT',
+                                        data: d.data ?? '',
+                                        valor: d.valor,
+                                        descricao: d.descricao,
+                                        mes: d.mes ?? h.mes_referencia,
+                                      }))
+                                      const newCats: Record<string, OFXCategoria> = {}
+                                      const newDescs: Record<string, string> = {}
+                                      txsRestauradas.forEach((t, i) => {
+                                        newCats[t.fitid] = (detalhes[i]?.categoria as OFXCategoria) ?? 'variavel'
+                                        newDescs[t.fitid] = t.descricao
+                                      })
+                                      setOfxTxs(prev => { const ex = new Set(prev.map(x => x.fitid)); return [...prev, ...txsRestauradas.filter(x => !ex.has(x.fitid))] })
+                                      setOfxCats(prev => ({ ...prev, ...newCats }))
+                                      setOfxDescricoes(prev => ({ ...prev, ...newDescs }))
+                                      setHistoricoConciliacoes(prev => prev.filter(x => x.id !== h.id))
+                                      setDespesas(prev => prev.filter(d => !(h.detalhes ?? []).some(det => det.despesa_id === d.id)))
+                                    }}
+                                    className="text-zinc-600 hover:text-red-400 transition-colors"
+                                    title="Excluir e restaurar no OFX"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                              {isExpanded && Array.isArray(h.detalhes) && h.detalhes.length > 0 && (
+                                <tr key={`${h.id}-detail`} className="bg-zinc-950/60">
+                                  <td colSpan={6} className="px-6 py-3">
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="border-b border-zinc-800 text-left">
+                                          <th className="text-zinc-600 font-medium py-1.5 pr-4">Descrição</th>
+                                          <th className="text-zinc-600 font-medium py-1.5 pr-4">Categoria</th>
+                                          <th className="text-zinc-600 font-medium py-1.5 text-right">Valor</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-zinc-800/30">
+                                        {h.detalhes.map((d, i) => (
+                                          <tr key={i}>
+                                            <td className="py-1.5 pr-4 text-zinc-400">{d.descricao}</td>
+                                            <td className="py-1.5 pr-4 text-zinc-500 capitalize">{d.categoria}</td>
+                                            <td className="py-1.5 text-zinc-300 font-semibold text-right whitespace-nowrap">{formatCurrency(d.valor)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Paginação */}
+                  {histPages > 1 && (
+                    <div className="px-6 py-3 border-t border-zinc-800 flex items-center justify-between">
+                      <span className="text-zinc-500 text-xs">
+                        Página {histPage} de {histPages} · {histTotal} registros
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setHistPage(p => Math.max(1, p - 1))}
+                          disabled={histPage === 1}
+                          className="p-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        {Array.from({ length: histPages }, (_, i) => i + 1)
+                          .filter(p => p === 1 || p === histPages || Math.abs(p - histPage) <= 1)
+                          .reduce<(number | '...')[]>((acc, p, i, arr) => {
+                            if (i > 0 && (p as number) - (arr[i - 1] as number) > 1) acc.push('...')
+                            acc.push(p)
+                            return acc
+                          }, [])
+                          .map((p, i) => p === '...' ? (
+                            <span key={`ellipsis-${i}`} className="text-zinc-600 text-xs px-1">…</span>
+                          ) : (
+                            <button
+                              key={p}
+                              onClick={() => setHistPage(p as number)}
+                              className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${histPage === p ? 'bg-orange-500 text-white' : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white'}`}
+                            >
+                              {p}
+                            </button>
+                          ))
+                        }
+                        <button
+                          onClick={() => setHistPage(p => Math.min(histPages, p + 1))}
+                          disabled={histPage === histPages}
+                          className="p-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        })()}
 
       </div>
     </div>

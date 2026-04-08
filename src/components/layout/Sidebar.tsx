@@ -14,16 +14,20 @@ import {
   DollarSign,
   FileText,
   Banknote,
+  Search,
+  TrendingUp,
 } from 'lucide-react'
 
 const ALL_NAV = [
-  { href: '/dashboard/geral',        label: 'Visão Geral',  icon: LayoutDashboard, aba: 'geral' },
-  { href: '/dashboard/consultores',  label: 'Consultores',  icon: Users,           aba: 'consultores' },
-  { href: '/dashboard/financeiro',   label: 'Financeiro',   icon: DollarSign,      aba: 'financeiro' },
-  { href: '/dashboard/contratos',    label: 'Contratos',    icon: FileText,        aba: 'contratos' },
-  { href: '/dashboard/caixa',        label: 'Caixa',        icon: Banknote,        aba: 'caixa' },
-  { href: '/dashboard/relatorios',   label: 'Relatórios',   icon: BarChart2,       aba: 'relatorios' },
-  { href: '/dashboard/usuarios',     label: 'Usuários',     icon: UserCog,         aba: 'usuarios' },
+  { href: '/dashboard/geral',        label: 'Visão Geral',    icon: LayoutDashboard, aba: 'geral' },
+  { href: '/dashboard/consultores',  label: 'Consultores',    icon: Users,           aba: 'consultores' },
+  { href: '/dashboard/financeiro',   label: 'Financeiro',     icon: DollarSign,      aba: 'financeiro' },
+  { href: '/dashboard/contratos',    label: 'Contratos',      icon: FileText,        aba: 'contratos' },
+  { href: '/dashboard/caixa',        label: 'Caixa',          icon: Banknote,        aba: 'caixa' },
+  { href: '/dashboard/fluxo-caixa', label: 'Fluxo de Caixa', icon: TrendingUp,      aba: 'fluxo-caixa' },
+  { href: '/dashboard/relatorios',   label: 'Relatórios',     icon: BarChart2,       aba: 'relatorios' },
+  { href: '/dashboard/localizador',  label: 'Servidores',     icon: Search,          aba: 'localizador' },
+  { href: '/dashboard/usuarios',     label: 'Usuários',       icon: UserCog,         aba: 'usuarios' },
 ]
 
 export function Sidebar() {

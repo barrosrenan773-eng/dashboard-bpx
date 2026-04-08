@@ -1,6 +1,6 @@
 const BASE = 'https://api.clint.digital/v1'
 
-const EXCLUIR = ['marcelo', 'desconhecido', 'adriane', 'giulia', 'thiago', 'reten', 'ia damatta', 'diretoria']
+const EXCLUIR = ['marcelo', 'desconhecido', 'adriane', 'giulia', 'thiago', 'reten', 'ia damatta', 'diretoria', 'bpx soluções', 'bpx solucoes', 'francisco']
 
 export function normalizarNome(n: string) {
   return n.replace(/#\d*\s*/g, '').replace(/[#@!]/g, '')
@@ -151,12 +151,33 @@ function calcularTempMedioFechamento(deals: ClintDeal[]): number {
   return diffs.length > 0 ? diffs.reduce((s, v) => s + v, 0) / diffs.length : 0
 }
 
+export async function fetchTodosUsuarios(token: string): Promise<{ id: string; nome: string }[]> {
+  try {
+    const res = await fetch(`${BASE}/users`, {
+      headers: { 'api-token': token },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return []
+    const json = await res.json()
+    return (json.data ?? [])
+      .map((u: { id: string; first_name: string; last_name: string }) => ({
+        id: u.id,
+        nome: normalizarNome(`${u.first_name} ${u.last_name}`.trim()),
+      }))
+      .filter((u: { id: string; nome: string }) => !deveExcluir(u.nome))
+  } catch {
+    return []
+  }
+}
+
 export async function getConsultores(token: string, startDate: string, endDate: string, prefix: string, noLeads = false, noLost = false) {
   const emptyLeads = { totalLeads: 0, leadsHoje: 0, leadsPorConsultor: {} as Record<string, { nome: string; leads: number; leadsHoje: number }> }
-  const [won, lost, leadsData] = await Promise.all([
+  const [won, lost, leadsData, todosUsuarios] = await Promise.all([
     fetchAllWon(token, startDate, endDate),
     noLost ? Promise.resolve([]) : fetchAllLost(token, startDate, endDate),
     noLeads ? Promise.resolve(emptyLeads) : fetchLeadsDoMes(token, prefix, startDate, endDate),
+    fetchTodosUsuarios(token),
   ])
 
   const { leadsPorConsultor } = leadsData
@@ -193,6 +214,13 @@ export async function getConsultores(token: string, startDate: string, endDate: 
     const perdidos = consultores[id].dealsPerdidos
     consultores[id].dealsAbertos = Math.max(0, ldata.leads - ganhos - perdidos)
     consultores[id].taxaConversao = ldata.leads > 0 ? (ganhos / ldata.leads) * 100 : 0
+  })
+
+  // Garantir que todos os usuários cadastrados na Clint apareçam, mesmo sem atividade
+  todosUsuarios.forEach(u => {
+    if (!consultores[u.id]) {
+      consultores[u.id] = { nome: u.nome, deals: 0, dealsPerdidos: 0, dealsAbertos: 0, receita: 0, leads: 0, leadsHoje: 0, taxaConversao: 0, tempMedioFechamento: 0, _wonDeals: [] }
+    }
   })
 
   // Calcular tempo médio de fechamento por consultor

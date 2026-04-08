@@ -4,8 +4,8 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
 function getSupabase() {
-  const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ffpeboanytasxoihrflz.supabase.co')
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL).trim()
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
   return createClient(url, key)
 }
 

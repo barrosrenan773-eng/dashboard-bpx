@@ -3,12 +3,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { avancarParcelas } from '@/lib/parcelas'
 import { randomUUID } from 'crypto'
 
-const supabase = createClient(
-  (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ffpeboanytasxoihrflz.supabase.co'),
-  (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '')
-)
+function getSupabase() {
+  return createClient(
+    (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim(),
+    (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+  )
+}
 
 export async function GET(req: NextRequest) {
+  const supabase = getSupabase()
   const status    = req.nextUrl.searchParams.get('status')
   const categoria = req.nextUrl.searchParams.get('categoria')
   const inicio    = req.nextUrl.searchParams.get('inicio')
@@ -41,6 +44,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = getSupabase()
   const body = await req.json()
   const { descricao, fornecedor, categoria, valor, data_vencimento, parcela_atual, total_parcelas, tipo } = body
 
@@ -75,6 +79,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const supabase = getSupabase()
   const body = await req.json()
   const { id, pagar, ...fields } = body
 
@@ -96,6 +101,7 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const supabase = getSupabase()
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
 

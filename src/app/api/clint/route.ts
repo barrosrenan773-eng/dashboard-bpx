@@ -11,7 +11,7 @@ const cache = new Map<string, { data: unknown; at: number }>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
 
 export async function GET(req: NextRequest) {
-  const token = process.env.CLINT_API_TOKEN || process.env.CLINT_API_KEY
+  const token = (process.env.CLINT_API_TOKEN || process.env.CLINT_API_KEY || '').trim()
   if (!token) return NextResponse.json({ error: 'CLINT_API_TOKEN não configurado' }, { status: 500 })
 
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })

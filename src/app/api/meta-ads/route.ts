@@ -3,8 +3,8 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(req: NextRequest) {
-  const token = process.env.META_ADS_ACCESS_TOKEN
-  const accountId = process.env.META_ADS_ACCOUNT_ID
+  const token = (process.env.META_ADS_ACCESS_TOKEN || '').trim()
+  const accountId = (process.env.META_ADS_ACCOUNT_ID || '').trim()
 
   if (!token || !accountId) {
     return NextResponse.json({ error: 'Credenciais Meta Ads não configuradas' }, { status: 500 })

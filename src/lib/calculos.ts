@@ -148,10 +148,11 @@ export function calcularHistoricoMensal(
 /** Distribuição de lucro padrão BPX */
 export function calcularDistribuicaoLucro(lucro: number) {
   return [
-    { nome: 'Francisco', percentual: 45.5, valor: lucro * 0.455 },
-    { nome: 'Renan',     percentual: 45.5, valor: lucro * 0.455 },
+    { nome: 'Francisco', percentual: 43.5, valor: lucro * 0.435 },
+    { nome: 'Renan',     percentual: 43.5, valor: lucro * 0.435 },
     { nome: 'Felipe',    percentual: 5,    valor: lucro * 0.05  },
     { nome: 'Marcelo',   percentual: 4,    valor: lucro * 0.04  },
+    { nome: 'Ingrid',    percentual: 4,    valor: lucro * 0.04  },
   ]
 }
 

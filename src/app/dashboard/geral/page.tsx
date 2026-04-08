@@ -38,10 +38,10 @@ import {
   Hash,
   Percent,
   Users,
+  Clock,
 } from 'lucide-react'
 
 type PeriodoKey = '7d' | '30d' | '90d' | 'mes' | 'custom'
-type StatusKey = 'todos' | 'ativo' | 'finalizado' | 'aguardando'
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
 
@@ -108,7 +108,6 @@ export default function GeralPage() {
   const [loading, setLoading] = useState(true)
 
   const [periodo, setPeriodo] = useState<PeriodoKey>('mes')
-  const [statusFiltro, setStatusFiltro] = useState<StatusKey>('todos')
   const [customStart, setCustomStart] = useState<string>(toISODate(startOfMonth(today)))
   const [customEnd, setCustomEnd] = useState<string>(toISODate(today))
   const [showCustom, setShowCustom] = useState(false)
@@ -146,9 +145,22 @@ export default function GeralPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo, customStart, customEnd])
 
-  const contratosFiltrados = useMemo(
-    () => filtrarContratos(contratos, dateStart, dateEnd, statusFiltro),
-    [contratos, dateStart, dateEnd, statusFiltro]
+  // Contratos finalizados → alimentam KPIs (receita, capital, produção, lucro)
+  const contratosFinalizados = useMemo(
+    () => filtrarContratos(contratos, dateStart, dateEnd, 'finalizado'),
+    [contratos, dateStart, dateEnd]
+  )
+
+  // Contratos aguardando → pipeline (capital em operação)
+  const contratosAguardando = useMemo(
+    () => filtrarContratos(contratos, dateStart, dateEnd, 'aguardando'),
+    [contratos, dateStart, dateEnd]
+  )
+
+  // Todos os contratos do período → apenas para exibição na tabela
+  const contratosPeriodo = useMemo(
+    () => filtrarContratos(contratos, dateStart, dateEnd, 'todos'),
+    [contratos, dateStart, dateEnd]
   )
 
   const despesasFiltradas = useMemo(
@@ -156,14 +168,28 @@ export default function GeralPage() {
     [despesas, dateStart, dateEnd]
   )
 
+  // KPIs baseados APENAS em contratos finalizados
   const kpis = useMemo(
-    () => calcularKPIs(contratosFiltrados, despesasFiltradas),
-    [contratosFiltrados, despesasFiltradas]
+    () => calcularKPIs(contratosFinalizados, despesasFiltradas),
+    [contratosFinalizados, despesasFiltradas]
+  )
+
+  // Pipeline: contratos aguardando liberação de margem
+  const pipeline = useMemo(() => ({
+    qtd: contratosAguardando.length,
+    capital: contratosAguardando.reduce((s, c) => s + (c.capital ?? 0), 0),
+    taxa: contratosAguardando.reduce((s, c) => s + (c.taxa ?? 0), 0),
+  }), [contratosAguardando])
+
+  // Histórico mensal apenas com contratos finalizados
+  const contratosFinalizadosTodos = useMemo(
+    () => contratos.filter(c => c.status === 'finalizado'),
+    [contratos]
   )
 
   const chartData = useMemo(
-    () => calcularHistoricoMensal(contratos, despesas, 6),
-    [contratos, despesas]
+    () => calcularHistoricoMensal(contratosFinalizadosTodos, despesas, 6),
+    [contratosFinalizadosTodos, despesas]
   )
 
   const distribuicao = useMemo(
@@ -184,17 +210,14 @@ export default function GeralPage() {
     { key: 'custom', label: 'Personalizado' },
   ]
 
-  const statusOptions: { key: StatusKey; label: string }[] = [
-    { key: 'todos', label: 'Todos' },
-    { key: 'ativo', label: 'Ativo' },
-    { key: 'finalizado', label: 'Finalizado' },
-    { key: 'aguardando', label: 'Aguardando' },
-  ]
-
   const statusColor: Record<string, string> = {
-    ativo: 'text-emerald-400 bg-emerald-500/10',
-    finalizado: 'text-blue-400 bg-blue-500/10',
+    finalizado: 'text-emerald-400 bg-emerald-500/10',
     aguardando: 'text-yellow-400 bg-yellow-500/10',
+  }
+
+  const statusLabel: Record<string, string> = {
+    finalizado: 'Finalizado',
+    aguardando: 'Aguardando margem',
   }
 
   return (
@@ -203,7 +226,7 @@ export default function GeralPage() {
 
       <div className="p-6 space-y-6">
 
-        {/* ── FILTROS ── */}
+        {/* ── FILTRO DE PERÍODO ── */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
             {periodoOptions.map((op) => (
@@ -213,22 +236,6 @@ export default function GeralPage() {
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   periodo === op.key
                     ? 'bg-blue-600 text-white shadow'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                }`}
-              >
-                {op.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
-            {statusOptions.map((op) => (
-              <button
-                key={op.key}
-                onClick={() => setStatusFiltro(op.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  statusFiltro === op.key
-                    ? 'bg-zinc-700 text-white shadow'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
                 }`}
               >
@@ -254,6 +261,11 @@ export default function GeralPage() {
               />
             </div>
           )}
+
+          <span className="text-zinc-600 text-xs">
+            KPIs baseados em <span className="text-emerald-400 font-medium">{kpis.qtdContratos} contrato{kpis.qtdContratos !== 1 ? 's' : ''} finalizado{kpis.qtdContratos !== 1 ? 's' : ''}</span>
+            {pipeline.qtd > 0 && <> · <span className="text-yellow-400 font-medium">{pipeline.qtd} em pipeline</span></>}
+          </span>
 
           {loading && (
             <span className="text-zinc-500 text-xs animate-pulse">Carregando...</span>
@@ -282,12 +294,12 @@ export default function GeralPage() {
           </div>
         )}
 
-        {/* ── KPI CARDS ── */}
+        {/* ── KPI CARDS — CONTRATOS FINALIZADOS ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           <KpiCard
             label={KPI_LABELS.producao}
             value={formatCurrency(kpis.producao)}
-            sub={`capital + taxa de ${kpis.qtdContratos} contrato${kpis.qtdContratos !== 1 ? 's' : ''}`}
+            sub={`capital + taxa · ${kpis.qtdContratos} finalizado${kpis.qtdContratos !== 1 ? 's' : ''}`}
             icon={BarChart2}
             color="#3B82F6"
             colorClass="text-blue-400"
@@ -296,7 +308,7 @@ export default function GeralPage() {
           <KpiCard
             label={KPI_LABELS.receitaTotal}
             value={formatCurrency(kpis.receita)}
-            sub="soma das taxas (lucro bruto)"
+            sub="soma das taxas (contratos finalizados)"
             icon={DollarSign}
             color="#10B981"
             colorClass="text-emerald-400"
@@ -305,7 +317,7 @@ export default function GeralPage() {
           <KpiCard
             label={KPI_LABELS.capital}
             value={formatCurrency(kpis.capital)}
-            sub="capital empregado (não é despesa)"
+            sub="capital retornado (contratos finalizados)"
             icon={Briefcase}
             color="#F59E0B"
             colorClass="text-amber-400"
@@ -314,7 +326,7 @@ export default function GeralPage() {
           <KpiCard
             label={KPI_LABELS.despesas}
             value={formatCurrency(kpis.despesas)}
-            sub={`${despesasFiltradas.length} lançamento${despesasFiltradas.length !== 1 ? 's' : ''}`}
+            sub={`${despesasFiltradas.length} lançamento${despesasFiltradas.length !== 1 ? 's' : ''} · Financeiro`}
             icon={TrendingDown}
             color="#EF4444"
             colorClass="text-red-400"
@@ -332,7 +344,7 @@ export default function GeralPage() {
           <KpiCard
             label={KPI_LABELS.qtdContratos}
             value={String(kpis.qtdContratos)}
-            sub="no período selecionado"
+            sub="contratos finalizados no período"
             icon={FileText}
             color="#8B5CF6"
             colorClass="text-violet-400"
@@ -358,9 +370,38 @@ export default function GeralPage() {
           />
         </div>
 
+        {/* ── PIPELINE — CONTRATOS AGUARDANDO ── */}
+        {pipeline.qtd > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 border-t-2 rounded-xl p-5" style={{ borderTopColor: '#EAB308' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-1.5 rounded-lg bg-yellow-500/10">
+                <Clock className="w-3.5 h-3.5 text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-sm">Pipeline — Aguardando Liberação de Margem</h3>
+                <p className="text-zinc-500 text-xs mt-0.5">Capital em operação · ainda não retornou ao caixa · não entra nos KPIs acima</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-center">
+                <p className="text-zinc-500 text-xs mb-1">Contratos</p>
+                <p className="text-yellow-400 font-bold text-xl">{pipeline.qtd}</p>
+              </div>
+              <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-center">
+                <p className="text-zinc-500 text-xs mb-1">Capital em Operação</p>
+                <p className="text-blue-400 font-bold text-xl">{formatCurrency(pipeline.capital)}</p>
+              </div>
+              <div className="bg-zinc-800/50 rounded-xl px-4 py-3 text-center">
+                <p className="text-zinc-500 text-xs mb-1">Taxa Potencial</p>
+                <p className="text-emerald-400 font-bold text-xl">{formatCurrency(pipeline.taxa)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── ESTRUTURA FINANCEIRA ── */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <h3 className="text-white font-semibold text-sm mb-5">Estrutura Financeira</h3>
+          <h3 className="text-white font-semibold text-sm mb-5">Estrutura Financeira — Contratos Finalizados</h3>
           <div className="flex flex-wrap items-center gap-2">
             {[
               { label: KPI_LABELS.producao, value: kpis.producao, bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
@@ -389,7 +430,8 @@ export default function GeralPage() {
 
         {/* ── GRÁFICO ── */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <h3 className="text-white font-semibold text-sm mb-5">Evolução Mensal — Últimos 6 Meses</h3>
+          <h3 className="text-white font-semibold text-sm mb-1">Evolução Mensal — Últimos 6 Meses</h3>
+          <p className="text-zinc-500 text-xs mb-5">Baseado em contratos finalizados + despesas lançadas no Financeiro</p>
 
           <svg width="0" height="0" style={{ position: 'absolute' }}>
             <defs>
@@ -443,8 +485,10 @@ export default function GeralPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
-              <h3 className="text-white font-semibold text-sm">Contratos</h3>
-              <span className="text-zinc-500 text-xs">{contratosFiltrados.length} registros</span>
+              <div>
+                <h3 className="text-white font-semibold text-sm">Contratos</h3>
+                <p className="text-zinc-500 text-xs mt-0.5">{contratosPeriodo.length} no período · fonte: aba Contratos</p>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -458,21 +502,21 @@ export default function GeralPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800">
-                  {contratosFiltrados.length === 0 ? (
+                  {contratosPeriodo.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="text-center text-zinc-600 py-8">
                         Nenhum contrato no período
                       </td>
                     </tr>
                   ) : (
-                    contratosFiltrados.slice(0, 20).map((c) => (
+                    contratosPeriodo.slice(0, 20).map((c) => (
                       <tr key={c.id} className="hover:bg-zinc-800/40 transition-colors">
                         <td className="px-5 py-3 text-white font-medium truncate max-w-[140px]">{c.nome}</td>
                         <td className="px-4 py-3 text-right text-amber-400">{formatCurrency(Number(c.capital) || 0)}</td>
                         <td className="px-4 py-3 text-right text-emerald-400">{formatCurrency(Number(c.taxa) || 0)}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColor[c.status] ?? 'text-zinc-400 bg-zinc-800'}`}>
-                            {c.status}
+                            {statusLabel[c.status] ?? c.status}
                           </span>
                         </td>
                         <td className="px-5 py-3 text-right text-zinc-400">
@@ -488,8 +532,10 @@ export default function GeralPage() {
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
-              <h3 className="text-white font-semibold text-sm">Despesas</h3>
-              <span className="text-zinc-500 text-xs">{despesasFiltradas.length} registros</span>
+              <div>
+                <h3 className="text-white font-semibold text-sm">Despesas</h3>
+                <p className="text-zinc-500 text-xs mt-0.5">{despesasFiltradas.length} no período · fonte: aba Financeiro</p>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -534,7 +580,7 @@ export default function GeralPage() {
                 </div>
                 <div>
                   <h3 className="text-white font-semibold text-sm">Distribuição de Lucros</h3>
-                  <p className="text-zinc-500 text-xs mt-0.5">Baseada no lucro líquido do período selecionado</p>
+                  <p className="text-zinc-500 text-xs mt-0.5">Baseada no lucro líquido dos contratos finalizados no período</p>
                 </div>
               </div>
               <div className="text-right">
