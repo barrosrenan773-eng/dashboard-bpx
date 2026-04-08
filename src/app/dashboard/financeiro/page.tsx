@@ -777,7 +777,7 @@ function FluxoCaixaModal({ mes, onClose }: { mes: string; onClose: () => void })
   useEffect(() => {
     setLoading(true)
     Promise.all([
-      fetch('/api/historico-conciliacoes').then(r => r.json()),
+      fetch(`/api/historico-conciliacoes?mes=${mesSel}`).then(r => r.json()),
       fetch(`/api/fluxo-caixa?mes=${mesSel}`).then(r => r.json()),
     ]).then(([historico, saldos]) => {
       const saldoMap: Record<string, any> = {}

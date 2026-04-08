@@ -9,13 +9,22 @@ function getSupabase() {
   return createClient(url, key)
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = getSupabase()
-  const { data, error } = await supabase
+  const mes = req.nextUrl.searchParams.get('mes')
+
+  let query = supabase
     .from('historico_conciliacoes')
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(50)
+
+  if (mes) {
+    query = query.eq('mes_referencia', mes)
+  } else {
+    query = query.limit(50)
+  }
+
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
