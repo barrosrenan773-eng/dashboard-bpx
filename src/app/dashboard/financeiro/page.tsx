@@ -790,6 +790,8 @@ function FluxoCaixaModal({ mes, onClose }: { mes: string; onClose: () => void })
           for (const d of detalhes) {
             const data: string = d.data || h.created_at?.slice(0, 10) || ''
             if (!data || !data.startsWith(mesSel)) continue
+            // Fluxo de caixa: só mostra CREDIT (entradas) ou DEBIT com despesa_id (conciliado como despesa)
+            if (d.tipo !== 'CREDIT' && !d.despesa_id) continue
             if (!movPorDia[data]) movPorDia[data] = []
             movPorDia[data].push({ tipo: d.tipo === 'CREDIT' ? 'CREDIT' : 'DEBIT', valor: Math.abs(parseFloat(d.valor) || 0), descricao: d.descricao || '', categoria: d.categoria || '' })
           }
@@ -1093,7 +1095,7 @@ export default function FinanceiroPage() {
   }, [])
 
   const despesasFiltradas = (empresaFiltro ? despesas.filter(d => d.empresa === empresaFiltro) : despesas)
-    .filter(d => d.categoria !== 'compra_divida')
+    .filter(d => d.categoria !== 'compra_divida' && d.categoria !== 'pl')
   const receitasFiltradas = empresaFiltro ? receitasManuais.filter(r => r.empresa === empresaFiltro) : receitasManuais
   const receitaContratosF = empresaFiltro ? 0 : receita // contratos não têm empresa ainda
   const totalDespesas = despesasFiltradas.reduce((s, d) => s + Number(d.valor), 0) + (empresaFiltro ? 0 : (metaAdsSpend ?? 0))
