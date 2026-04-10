@@ -16,7 +16,7 @@
 // NUNCA definir labels localmente nas páginas — importar daqui.
 
 export const KPI_LABELS = {
-  producao:      'Produção Total',
+  producao:      'Giro Total',
   receita:       'Receita',
   receitaTotal:  'Receita Total',
   capital:       'Capital Utilizado',
@@ -104,7 +104,7 @@ export function calcularKPIs(contratos: Contrato[], despesas: Despesa[]): KPIs {
   const despesasTotal = despesas.reduce((s, d) => s + (Number(d.valor) || 0), 0)
   const lucro        = receita - despesasTotal
   const margem       = receita > 0 ? (lucro / receita) * 100 : 0
-  const ticketMedio  = qtdContratos > 0 ? producao / qtdContratos : 0
+  const ticketMedio  = qtdContratos > 0 ? receita / qtdContratos : 0
   const taxaMedia    = qtdContratos > 0 ? receita  / qtdContratos : 0
 
   const finalizados  = contratos.filter(c => c.status === 'finalizado').length
