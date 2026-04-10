@@ -21,6 +21,7 @@ type Contrato = {
   data_finalizacao: string | null
   arquivo_url: string | null
   arquivo_nome: string | null
+  observacoes: string | null
   created_at: string
 }
 
@@ -50,6 +51,7 @@ const EMPTY_FORM = {
   taxa: '',
   status: 'aguardando' as Contrato['status'],
   data_finalizacao: '',
+  observacoes: '',
 }
 
 function KpiCard({
@@ -112,6 +114,7 @@ export default function ContratosPage() {
       taxa: parseFloat(form.taxa) || 0,
       status: form.status,
       data_finalizacao: form.data_finalizacao || null,
+      observacoes: form.observacoes || null,
     }
     const res = editId
       ? await fetch('/api/contratos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editId, ...body }) })
@@ -157,6 +160,7 @@ export default function ContratosPage() {
       taxa: String(c.taxa),
       status: c.status,
       data_finalizacao: c.data_finalizacao ?? '',
+      observacoes: c.observacoes ?? '',
     })
     setEditId(c.id)
     setAnexoFile(null)
@@ -327,6 +331,18 @@ export default function ContratosPage() {
                 </div>
               )}
 
+              {/* Observações */}
+              <div className="md:col-span-2">
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Observações</label>
+                <textarea
+                  value={form.observacoes ?? ''}
+                  onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
+                  placeholder="Anotações sobre o contrato..."
+                  rows={3}
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors resize-none"
+                />
+              </div>
+
               {/* Anexo de arquivo */}
               <div className="md:col-span-2">
                 <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Contrato em Anexo (PDF, DOCX — referência)</label>
@@ -447,6 +463,9 @@ export default function ContratosPage() {
                         <div>
                           <span className="text-white font-medium text-sm">{c.nome}</span>
                           {c.origem && <span className="ml-2 text-zinc-600 text-xs">{c.origem}</span>}
+                          {c.observacoes && (
+                            <p className="text-zinc-500 text-xs mt-0.5 max-w-[200px] truncate" title={c.observacoes}>{c.observacoes}</p>
+                          )}
                         </div>
                       </td>
                       <td className="py-4 px-4">
