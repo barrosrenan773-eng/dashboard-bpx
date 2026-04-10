@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const url = urlData.publicUrl
 
   const { error: updateError } = await supabase
-    .from('Contratos')
+    .from('contratos')
     .update({ arquivo_url: url, arquivo_nome: file.name })
     .eq('id', id)
 
@@ -49,7 +49,7 @@ export async function DELETE(req: NextRequest) {
 
   // Remove arquivo_url e arquivo_nome do registro
   const { error } = await supabase
-    .from('Contratos')
+    .from('contratos')
     .update({ arquivo_url: null, arquivo_nome: null })
     .eq('id', id)
 
