@@ -384,6 +384,14 @@ export default function RelatoriosPage() {
   }), [contratos, dateStart, dateEnd])
 
   const despesasFiltradas = useMemo(() => despesas.filter(d => {
+    if (d.categoria === 'compra_divida' || d.categoria === 'pl') return false
+    if (d.mes) {
+      const [y, m] = d.mes.split('-').map(Number)
+      const dt = new Date(y, m - 1, 1)
+      const startMes = new Date(dateStart.getFullYear(), dateStart.getMonth(), 1)
+      const endMes = new Date(dateEnd.getFullYear(), dateEnd.getMonth(), 1)
+      return dt >= startMes && dt <= endMes
+    }
     const dt = new Date(d.created_at)
     return dt >= dateStart && dt <= dateEnd
   }), [despesas, dateStart, dateEnd])
@@ -396,7 +404,7 @@ export default function RelatoriosPage() {
   const lucro         = totalReceita - totalDespesas
   const margem        = totalReceita > 0 ? (lucro / totalReceita) * 100 : 0
   const qtd           = contratosFinalizados.length
-  const ticketMedio   = qtd > 0 ? totalProducao / qtd : 0
+  const ticketMedio   = qtd > 0 ? totalReceita / qtd : 0
   const taxaMedia     = qtd > 0 ? totalReceita / qtd : 0
 
   // Pipeline metrics
@@ -412,7 +420,7 @@ export default function RelatoriosPage() {
     }
     return months.map(m => {
       const mc = contratos.filter(c => getMonthKey(c.created_at) === m && c.status === 'finalizado')
-      const md = despesas.filter(d => d.mes === m || getMonthKey(d.created_at) === m)
+      const md = despesas.filter(d => (d.mes === m || getMonthKey(d.created_at) === m) && d.categoria !== 'compra_divida' && d.categoria !== 'pl')
       const cap  = mc.reduce((s, c) => s + (c.capital ?? 0), 0)
       const taxa = mc.reduce((s, c) => s + (c.taxa ?? 0), 0)
       const desp = md.reduce((s, d) => s + (d.valor ?? 0), 0)
@@ -586,7 +594,7 @@ export default function RelatoriosPage() {
 
         {/* ── KPI CARDS — CONTRATOS FINALIZADOS ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-          <KpiCard label={KPI_LABELS.producao}      value={formatCurrency(totalProducao)} sub={`capital + taxa · ${qtd} finalizado${qtd !== 1 ? 's' : ''}`} icon={BarChart2}   color="#3B82F6" colorClass="text-blue-400"    bgClass="bg-blue-500/10" />
+          <KpiCard label="Giro Total"      value={formatCurrency(totalProducao)} sub={`capital + taxa · ${qtd} finalizado${qtd !== 1 ? 's' : ''}`} icon={BarChart2}   color="#3B82F6" colorClass="text-blue-400"    bgClass="bg-blue-500/10" />
           <KpiCard label="Receita (Taxa da Operação)" value={formatCurrency(totalReceita)}  sub="campo Taxa — contratos finalizados"  icon={DollarSign}  color="#10B981" colorClass="text-emerald-400"  bgClass="bg-emerald-500/10" />
           <KpiCard label="Capital de Giro (Operação)" value={formatCurrency(totalCapital)}  sub="campo Capital — contratos finalizados" icon={Briefcase}   color="#F59E0B" colorClass="text-amber-400"   bgClass="bg-amber-500/10" />
           <KpiCard label={KPI_LABELS.despesasTotal} value={formatCurrency(totalDespesas)} sub={`${despesasFiltradas.length} lançamento${despesasFiltradas.length !== 1 ? 's' : ''} · aba Financeiro`} icon={TrendingDown} color="#EF4444" colorClass="text-red-400" bgClass="bg-red-500/10" />
@@ -730,7 +738,7 @@ export default function RelatoriosPage() {
           <h3 className="text-white font-semibold text-sm mb-5">Composição do Resultado</h3>
           <div className="flex flex-wrap items-center gap-2">
             {[
-              { label: KPI_LABELS.producao,  value: totalProducao, bg: 'bg-blue-500/10',   border: 'border-blue-500/30',   text: 'text-blue-400' },
+              { label: 'Giro Total',  value: totalProducao, bg: 'bg-blue-500/10',   border: 'border-blue-500/30',   text: 'text-blue-400' },
               { label: 'Capital de Giro',  value: totalCapital,  bg: 'bg-amber-500/10',  border: 'border-amber-500/30',  text: 'text-amber-400' },
               { label: 'Receita (Taxa)',   value: totalReceita,  bg: 'bg-emerald-500/10',border: 'border-emerald-500/30',text: 'text-emerald-400' },
               { label: KPI_LABELS.despesas,  value: totalDespesas, bg: 'bg-red-500/10',    border: 'border-red-500/30',    text: 'text-red-400' },
