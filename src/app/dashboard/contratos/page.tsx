@@ -120,18 +120,11 @@ export default function ContratosPage() {
     if (data.error) { setError(data.error); setSaving(false); return }
 
     // Se tiver arquivo selecionado, faz upload
-    if (anexoFile && data.id) {
+    if (anexoFile && (data.id || editId)) {
       setUploadingAnexo(true)
       const fd = new FormData()
       fd.append('file', anexoFile)
-      fd.append('id', String(data.id))
-      await fetch('/api/contratos/upload', { method: 'POST', body: fd })
-      setUploadingAnexo(false)
-    } else if (anexoFile && editId) {
-      setUploadingAnexo(true)
-      const fd = new FormData()
-      fd.append('file', anexoFile)
-      fd.append('id', String(editId))
+      fd.append('id', String(data.id || editId))
       await fetch('/api/contratos/upload', { method: 'POST', body: fd })
       setUploadingAnexo(false)
     }
@@ -141,7 +134,7 @@ export default function ContratosPage() {
     setForm(EMPTY_FORM)
     setEditId(null)
     setAnexoFile(null)
-    load()
+    await load()
   }
 
   async function handleDelete(id: number) {
