@@ -174,6 +174,16 @@ export function filtrarContratos(
 /** Filtra despesas por período */
 export function filtrarDespesas(despesas: Despesa[], dateStart: Date, dateEnd: Date): Despesa[] {
   return despesas.filter(d => {
+    // Exclui categorias que não são despesas operacionais
+    if (d.categoria === 'compra_divida' || d.categoria === 'pl') return false
+    // Filtra pelo mês de competência (campo mes) em vez de created_at
+    if (d.mes) {
+      const [y, m] = d.mes.split('-').map(Number)
+      const dt = new Date(y, m - 1, 1)
+      const startMes = new Date(dateStart.getFullYear(), dateStart.getMonth(), 1)
+      const endMes = new Date(dateEnd.getFullYear(), dateEnd.getMonth(), 1)
+      return dt >= startMes && dt <= endMes
+    }
     const dt = new Date(d.created_at)
     return dt >= dateStart && dt <= dateEnd
   })
