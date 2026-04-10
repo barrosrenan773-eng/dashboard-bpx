@@ -126,6 +126,7 @@ type ContaForm = {
 
 const CONTA_CATEGORIAS = [
   { key: 'dept_pessoal',         label: 'Departamento Pessoal' },
+  { key: 'beneficios',           label: 'Benefícios (VR/VA/Saúde)' },
   { key: 'comissao_corretor',    label: 'Comissão de Corretor' },
   { key: 'comissao_gerente',     label: 'Comissão de Gerente' },
   { key: 'marketing',            label: 'Marketing' },
@@ -673,6 +674,7 @@ function formatMesLabel(mes: string): string {
 
 const CATEGORIAS = [
   { key: 'dept_pessoal',         label: 'Departamento Pessoal' },
+  { key: 'beneficios',           label: 'Benefícios (VR/VA/Saúde)' },
   { key: 'comissao_corretor',    label: 'Comissão de Corretor' },
   { key: 'comissao_gerente',     label: 'Comissão de Gerente' },
   { key: 'marketing',            label: 'Marketing' },
@@ -1279,10 +1281,17 @@ export default function FinanceiroPage() {
       // Entradas (CREDIT) ficam só no histórico — não vão pro DRE
       let despesaCriada: Despesa | null = null
       if (t.tipo !== 'CREDIT') {
+        // dept_pessoal é sempre do mês anterior (folha paga no mês seguinte)
+        let mesDespesa = mes
+        if (cat === 'dept_pessoal') {
+          const [y, m] = mes.split('-').map(Number)
+          const anterior = new Date(y, m - 2, 1)
+          mesDespesa = `${anterior.getFullYear()}-${String(anterior.getMonth() + 1).padStart(2, '0')}`
+        }
         const dRes = await fetch('/api/despesas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ descricao: ofxDescricoes[t.fitid] || t.descricao, categoria: cat, valor: t.valor, mes, empresa: ofxEmpresas[t.fitid] || 'BPX', data: t.data || null }),
+          body: JSON.stringify({ descricao: ofxDescricoes[t.fitid] || t.descricao, categoria: cat, valor: t.valor, mes: mesDespesa, empresa: ofxEmpresas[t.fitid] || 'BPX', data: t.data || null }),
         })
         const despesaJson = await dRes.json()
         if (!dRes.ok) {
