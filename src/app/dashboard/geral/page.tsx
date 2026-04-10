@@ -531,41 +531,48 @@ export default function GeralPage() {
           </div>
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-white font-semibold text-sm">Despesas</h3>
-                <p className="text-zinc-500 text-xs mt-0.5">{despesasFiltradas.length} no período · fonte: aba Financeiro</p>
-              </div>
+            <div className="px-5 py-4 border-b border-zinc-800">
+              <h3 className="text-white font-semibold text-sm">Despesas por Categoria</h3>
+              <p className="text-zinc-500 text-xs mt-0.5">{despesasFiltradas.length} lançamentos · fonte: aba Financeiro</p>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-zinc-500 uppercase tracking-wider">
-                    <th className="text-left px-5 py-3 font-medium">Categoria</th>
-                    <th className="text-left px-4 py-3 font-medium">Descrição</th>
-                    <th className="text-right px-4 py-3 font-medium">Valor</th>
-                    <th className="text-right px-5 py-3 font-medium">Mês</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800">
-                  {despesasFiltradas.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="text-center text-zinc-600 py-8">
-                        Nenhuma despesa no período
-                      </td>
-                    </tr>
-                  ) : (
-                    despesasFiltradas.slice(0, 20).map((d) => (
-                      <tr key={d.id} className="hover:bg-zinc-800/40 transition-colors">
-                        <td className="px-5 py-3 text-zinc-300 capitalize">{d.categoria}</td>
-                        <td className="px-4 py-3 text-zinc-400 truncate max-w-[140px]">{d.descricao}</td>
-                        <td className="px-4 py-3 text-right text-red-400 font-medium">{formatCurrency(Number(d.valor) || 0)}</td>
-                        <td className="px-5 py-3 text-right text-zinc-500">{d.mes}</td>
-                      </tr>
+            <div className="divide-y divide-zinc-800">
+              {despesasFiltradas.length === 0 ? (
+                <p className="text-center text-zinc-600 py-8 text-xs">Nenhuma despesa no período</p>
+              ) : (
+                (() => {
+                  const LABELS: Record<string, string> = {
+                    dept_pessoal: 'Departamento Pessoal', beneficios: 'Benefícios', comissao_corretor: 'Comissão Corretor',
+                    comissao_gerente: 'Comissão Gerente', marketing: 'Marketing', servico_terceirizado: 'Serviço Terceirizado',
+                    impostos: 'Impostos', taxas_bancarias: 'Taxas Bancárias', despesas_diversas: 'Despesas Diversas',
+                    devolucao_emprestimo: 'Devolução Empréstimo', bonificacao: 'Bonificação',
+                    fixa: 'Despesas Fixas', variavel: 'Despesas Variáveis', pix: 'Tarifas Pix', pessoal: 'Pessoal',
+                  }
+                  const byCat: Record<string, { total: number; items: Despesa[] }> = {}
+                  for (const d of despesasFiltradas) {
+                    if (!byCat[d.categoria]) byCat[d.categoria] = { total: 0, items: [] }
+                    byCat[d.categoria].total += Number(d.valor) || 0
+                    byCat[d.categoria].items.push(d)
+                  }
+                  return Object.entries(byCat)
+                    .sort((a, b) => b[1].total - a[1].total)
+                    .map(([cat, { total, items }]) => (
+                      <div key={cat} className="px-5 py-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-zinc-300 text-xs font-semibold">{LABELS[cat] || cat}</span>
+                          <span className="text-red-400 text-xs font-bold">{formatCurrency(total)}</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          {items.map(d => (
+                            <div key={d.id} className="flex items-center justify-between">
+                              <span className="text-zinc-500 text-xs truncate max-w-[200px]">{d.descricao || '—'}</span>
+                              <span className="text-zinc-500 text-xs ml-2">{formatCurrency(Number(d.valor))}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     ))
-                  )}
-                </tbody>
-              </table>
+                })()
+              )}
             </div>
           </div>
         </div>

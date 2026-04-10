@@ -24,7 +24,6 @@ const ALL_NAV = [
   { href: '/dashboard/financeiro',   label: 'Financeiro',     icon: DollarSign,      aba: 'financeiro' },
   { href: '/dashboard/contratos',    label: 'Contratos',      icon: FileText,        aba: 'contratos' },
   { href: '/dashboard/caixa',        label: 'Caixa',          icon: Banknote,        aba: 'caixa' },
-  { href: '/dashboard/relatorios',   label: 'Relatórios',     icon: BarChart2,       aba: 'relatorios' },
   { href: '/dashboard/localizador',  label: 'Servidores',     icon: Search,          aba: 'localizador' },
   { href: '/dashboard/usuarios',     label: 'Usuários',       icon: UserCog,         aba: 'usuarios' },
 ]
