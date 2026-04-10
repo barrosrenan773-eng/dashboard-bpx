@@ -24,16 +24,16 @@ export async function POST(req: NextRequest) {
   const buffer = new Uint8Array(arrayBuffer)
 
   const { error: uploadError } = await supabase.storage
-    .from('contratos')
+    .from('Contratos')
     .upload(path, buffer, { contentType: file.type, upsert: true })
 
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
 
-  const { data: urlData } = supabase.storage.from('contratos').getPublicUrl(path)
+  const { data: urlData } = supabase.storage.from('Contratos').getPublicUrl(path)
   const url = urlData.publicUrl
 
   const { error: updateError } = await supabase
-    .from('contratos')
+    .from('Contratos')
     .update({ arquivo_url: url, arquivo_nome: file.name })
     .eq('id', id)
 
@@ -49,7 +49,7 @@ export async function DELETE(req: NextRequest) {
 
   // Remove arquivo_url e arquivo_nome do registro
   const { error } = await supabase
-    .from('contratos')
+    .from('Contratos')
     .update({ arquivo_url: null, arquivo_nome: null })
     .eq('id', id)
 
