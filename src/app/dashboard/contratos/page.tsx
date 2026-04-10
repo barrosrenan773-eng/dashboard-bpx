@@ -464,7 +464,7 @@ export default function ContratosPage() {
                           <span className="text-white font-medium text-sm">{c.nome}</span>
                           {c.origem && <span className="ml-2 text-zinc-600 text-xs">{c.origem}</span>}
                           {c.observacoes && (
-                            <p className="text-zinc-500 text-xs mt-0.5 max-w-[200px] truncate" title={c.observacoes}>{c.observacoes}</p>
+                            <p className="text-amber-400 text-xs mt-0.5 max-w-[200px] truncate font-medium" title={c.observacoes}>{c.observacoes}</p>
                           )}
                         </div>
                       </td>
