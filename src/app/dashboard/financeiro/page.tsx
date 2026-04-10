@@ -52,7 +52,7 @@ type OFXTransaction = {
   mes: string
 }
 
-type OFXCategoria = 'ignorar' | 'fixa' | 'variavel' | 'pix' | 'pessoal' | 'dept_pessoal' | 'comissao_corretor' | 'comissao_gerente' | 'marketing' | 'servico_terceirizado' | 'impostos' | 'taxas_bancarias' | 'compra_divida' | 'despesas_diversas' | 'devolucao_emprestimo'
+type OFXCategoria = 'ignorar' | 'fixa' | 'variavel' | 'pix' | 'pessoal' | 'dept_pessoal' | 'beneficios' | 'comissao_corretor' | 'comissao_gerente' | 'marketing' | 'servico_terceirizado' | 'impostos' | 'taxas_bancarias' | 'compra_divida' | 'despesas_diversas' | 'devolucao_emprestimo' | 'bonificacao' | 'pl'
 
 type Despesa = {
   id: number
@@ -1281,9 +1281,9 @@ export default function FinanceiroPage() {
       // Entradas (CREDIT) ficam só no histórico — não vão pro DRE
       let despesaCriada: Despesa | null = null
       if (t.tipo !== 'CREDIT') {
-        // dept_pessoal é sempre do mês anterior (folha paga no mês seguinte)
+        // dept_pessoal e bonificacao são sempre do mês anterior (pagas no mês seguinte)
         let mesDespesa = mes
-        if (cat === 'dept_pessoal') {
+        if (cat === 'dept_pessoal' || cat === 'bonificacao') {
           const [y, m] = mes.split('-').map(Number)
           const anterior = new Date(y, m - 2, 1)
           mesDespesa = `${anterior.getFullYear()}-${String(anterior.getMonth() + 1).padStart(2, '0')}`
