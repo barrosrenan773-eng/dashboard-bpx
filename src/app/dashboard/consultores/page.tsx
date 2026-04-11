@@ -470,7 +470,7 @@ function ConsultoresInner() {
   const firstOfMonth = toISODate(startOfMonth(todayDate))
   const start        = searchParams.get('start') || firstOfMonth
   const end          = searchParams.get('end')   || today
-  const mes          = start.slice(0, 7)
+  const mes          = toISODate(startOfMonth(todayDate)).slice(0, 7) // sempre mês atual para metas
 
   const [periodo, setPeriodo]         = useState<PeriodoKey>('mes')
   const [customStart, setCustomStart] = useState(firstOfMonth)
