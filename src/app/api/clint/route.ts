@@ -8,7 +8,7 @@ const BASE = 'https://api.clint.digital/v1'
 
 // Cache em memória: evita refetch se os mesmos params foram pedidos < 5 min atrás
 const cache = new Map<string, { data: unknown; at: number }>()
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+const CACHE_TTL = 2 * 60 * 1000 // 2 minutos
 
 export async function GET(req: NextRequest) {
   const token = (process.env.CLINT_API_TOKEN || process.env.CLINT_API_KEY || '').trim()
@@ -199,7 +199,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ brtToday, monthStart, totalCount: json.totalCount, totalPages: json.totalPages, maxFetchable: 1000, willTruncate: (json.totalCount ?? 0) > 1000 })
   }
 
-  const cacheKey = `${startDate}|${endDate}|${noLeads}|${noLost}`
+  // Inclui o slot de 2min no cache key para que "hoje" atualize automaticamente
+  const timeSlot = Math.floor(Date.now() / CACHE_TTL)
+  const cacheKey = `${startDate}|${endDate}|${noLeads}|${noLost}|${timeSlot}`
 
   if (!bust) {
     const cached = cache.get(cacheKey)

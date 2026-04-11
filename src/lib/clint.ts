@@ -114,6 +114,8 @@ export async function fetchLeadsDoMes(
   const lastDay = new Date(Number(y), Number(m), 0).toISOString().slice(0, 10)
   const endDay   = endDate   ?? (today.startsWith(prefix) ? today : lastDay)
   const startDay = startDate ?? `${prefix}-01`
+  // "hoje" para comparação: se filtrando período específico, usa o endDay; senão usa hoje real
+  const diaReferencia = endDay
 
   // Usa offsets BRT corretos: início = BRT 00:00 = UTC 03:00; fim = BRT 23:59 = UTC+1dia 02:59
   const data = await fetchDeals(token, {
@@ -132,10 +134,10 @@ export async function fetchLeadsDoMes(
     const nome = normalizarNome(d.user?.full_name ?? 'Desconhecido')
     if (deveExcluir(nome)) continue
     totalLeads++
-    if (ca === today) leadsHoje++
+    if (ca === diaReferencia) leadsHoje++
     if (!leadsPorConsultor[id]) leadsPorConsultor[id] = { nome, leads: 0, leadsHoje: 0 }
     leadsPorConsultor[id].leads++
-    if (ca === today) leadsPorConsultor[id].leadsHoje++
+    if (ca === diaReferencia) leadsPorConsultor[id].leadsHoje++
   }
 
   return { totalLeads, leadsHoje, leadsPorConsultor }
