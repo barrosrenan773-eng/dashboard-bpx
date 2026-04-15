@@ -327,9 +327,9 @@ export default function ContratosPage() {
             bgClass="bg-blue-500/10"
           />
           <KpiCard
-            label={L.receita}
-            value={formatCurrency(contratosDoMes.reduce((s, c) => s + c.taxa, 0))}
-            sub={`finalizados em ${mesComissao}`}
+            label={L.receitaTotal}
+            value={formatCurrency(contratos.filter(c => c.status === 'finalizado').reduce((s, c) => s + c.taxa, 0))}
+            sub={`${totalFinalizados} contratos finalizados`}
             icon={DollarSign}
             color="#10B981"
             colorClass="text-emerald-400"
