@@ -645,6 +645,8 @@ export default function CaixaPage() {
   const [expOperacao, setExpOperacao] = useState(true)
   const [expDespesas, setExpDespesas] = useState(true)
   const [expFora, setExpFora] = useState(false)
+  const [filtroInicio, setFiltroInicio] = useState('')
+  const [filtroFim, setFiltroFim] = useState('')
 
   async function loadAll() {
     setLoading(true)
@@ -691,7 +693,7 @@ export default function CaixaPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadAll() }, [mes]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadAll(); setFiltroInicio(''); setFiltroFim('') }, [mes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Computed values ──────────────────────────────────────────────────────────
 
@@ -709,15 +711,20 @@ export default function CaixaPage() {
   // Capital fora do caixa (judicializado / em operação externa)
   const totalCapitalFora = capitalFora.reduce((s, c) => s + (c.valor ?? 0), 0)
 
-  // Despesas do período — filtra por mes (competência), igual ao DRE do financeiro
+  // Despesas do período — filtra por mes (competência), com refinamento opcional por data
   const EXCLUIR = ['compra_divida', 'pl', 'devolucao_emprestimo', 'bonificacao']
   const despesasPeriodo = despesas.filter(d => {
     if (EXCLUIR.includes(d.categoria)) return false
-    // Usa o campo mes (competência) para não perder lançamentos com created_at em outro mês
-    return d.mes === mes
+    if (d.mes !== mes) return false
+    // Refinamento por período (se preenchido), usa created_at
+    if (filtroInicio && d.created_at?.slice(0, 10) < filtroInicio) return false
+    if (filtroFim && d.created_at?.slice(0, 10) > filtroFim) return false
+    return true
   })
   const totalDespesasDB = despesasPeriodo.reduce((s, d) => s + (d.valor ?? 0), 0)
-  const totalDespesasPeriodo = totalDespesasDB + folhaPrevista + comissoesDoMes
+  // Folha e comissões são mensais — só aparecem se não houver filtro de datas ativo
+  const temFiltroData = !!(filtroInicio || filtroFim)
+  const totalDespesasPeriodo = totalDespesasDB + (temFiltroData ? 0 : folhaPrevista + comissoesDoMes)
 
   // Caixa Total (conciliação)
   const caixaTotal = caixaDisponivel + totalCapitalEmOperacao + totalCapitalFora
@@ -950,12 +957,41 @@ export default function CaixaPage() {
 
         <SectionBlock
           title="Despesas por Categoria"
-          subtitle={`Competência: ${formatMesLabel(mes)}`}
+          subtitle={temFiltroData ? `${filtroInicio} até ${filtroFim}` : `Competência: ${formatMesLabel(mes)}`}
           badge={`${despesasPeriodo.length} · ${fmt(totalDespesasPeriodo)}`}
           expanded={expDespesas}
           onToggle={() => setExpDespesas(v => !v)}
         >
-          <DespesasPorCategoria despesas={despesasPeriodo} folha={folhaPrevista} comissoes={comissoesDoMes} />
+          {/* Filtro de período */}
+          <div className="px-5 py-3 border-b border-zinc-800/50 flex flex-wrap items-center gap-2">
+            <span className="text-zinc-500 text-xs">Período:</span>
+            <input
+              type="date"
+              value={filtroInicio}
+              onChange={e => setFiltroInicio(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 [color-scheme:dark]"
+            />
+            <span className="text-zinc-600 text-xs">até</span>
+            <input
+              type="date"
+              value={filtroFim}
+              onChange={e => setFiltroFim(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 [color-scheme:dark]"
+            />
+            {temFiltroData && (
+              <button
+                onClick={() => { setFiltroInicio(''); setFiltroFim('') }}
+                className="text-zinc-500 hover:text-zinc-300 text-xs px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 hover:border-zinc-500 transition-colors"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <DespesasPorCategoria
+            despesas={despesasPeriodo}
+            folha={temFiltroData ? 0 : folhaPrevista}
+            comissoes={temFiltroData ? 0 : comissoesDoMes}
+          />
         </SectionBlock>
 
         <SectionBlock
