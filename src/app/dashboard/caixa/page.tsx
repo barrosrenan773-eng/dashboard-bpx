@@ -521,9 +521,8 @@ function catLabel(cat: string): string {
 function DespesasPorCategoria({ despesas }: { despesas: Despesa[] }) {
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
 
-  const operacionais = despesas.filter(d => !EXCLUIR_CATS.includes(d.categoria))
   const grupos: Record<string, { total: number; items: Despesa[] }> = {}
-  for (const d of operacionais) {
+  for (const d of despesas) {
     const cat = d.categoria || 'sem categoria'
     if (!grupos[cat]) grupos[cat] = { total: 0, items: [] }
     grupos[cat].total += Number(d.valor) || 0
@@ -658,8 +657,10 @@ export default function CaixaPage() {
   // Capital fora do caixa (judicializado / em operação externa)
   const totalCapitalFora = capitalFora.reduce((s, c) => s + (c.valor ?? 0), 0)
 
-  // Despesas do período
+  // Despesas do período — exclui categorias não operacionais
+  const EXCLUIR = ['compra_divida', 'pl', 'devolucao_emprestimo', 'bonificacao']
   const despesasPeriodo = despesas.filter(d => {
+    if (EXCLUIR.includes(d.categoria)) return false
     const dt = d.created_at?.slice(0, 10) ?? ''
     return dt >= periodoInicio && dt <= periodoFim
   })
