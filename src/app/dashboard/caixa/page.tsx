@@ -518,7 +518,7 @@ function catLabel(cat: string): string {
   return LABELS[cat] ?? cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
-function DespesasPorCategoria({ despesas }: { despesas: Despesa[] }) {
+function DespesasPorCategoria({ despesas, folha = 0, comissoes = 0 }: { despesas: Despesa[]; folha?: number; comissoes?: number }) {
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
 
   const grupos: Record<string, { total: number; items: Despesa[] }> = {}
@@ -528,7 +528,8 @@ function DespesasPorCategoria({ despesas }: { despesas: Despesa[] }) {
     grupos[cat].total += Number(d.valor) || 0
     grupos[cat].items.push(d)
   }
-  const total = Object.values(grupos).reduce((s, g) => s + g.total, 0)
+  const totalDB = Object.values(grupos).reduce((s, g) => s + g.total, 0)
+  const total = totalDB + folha + comissoes
   const entries = Object.entries(grupos).sort((a, b) => b[1].total - a[1].total)
 
   function toggle(cat: string) {
@@ -588,6 +589,32 @@ function DespesasPorCategoria({ despesas }: { despesas: Despesa[] }) {
         )
       })}
 
+      {/* Folha e Comissões (igual ao DRE) */}
+      {folha > 0 && (
+        <div className="flex items-center gap-3 py-2 px-2">
+          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: '#8b5cf6' }} />
+          <span className="text-zinc-300 text-sm flex-1">Depto. Pessoal (folha prevista)</span>
+          <div className="w-24 mx-2 bg-zinc-800 rounded-full h-1.5">
+            <div className="h-1.5 rounded-full" style={{ width: `${total > 0 ? (folha / total) * 100 : 0}%`, background: '#8b5cf6', opacity: 0.7 }} />
+          </div>
+          <span className="text-zinc-500 text-xs w-10 text-right">{total > 0 ? ((folha / total) * 100).toFixed(0) : 0}%</span>
+          <span className="text-zinc-300 text-sm font-medium w-28 text-right">{fmt(folha)}</span>
+          <div className="w-3.5 h-3.5" />
+        </div>
+      )}
+      {comissoes > 0 && (
+        <div className="flex items-center gap-3 py-2 px-2">
+          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: '#f59e0b' }} />
+          <span className="text-zinc-300 text-sm flex-1">Comissões (calculadas)</span>
+          <div className="w-24 mx-2 bg-zinc-800 rounded-full h-1.5">
+            <div className="h-1.5 rounded-full" style={{ width: `${total > 0 ? (comissoes / total) * 100 : 0}%`, background: '#f59e0b', opacity: 0.7 }} />
+          </div>
+          <span className="text-zinc-500 text-xs w-10 text-right">{total > 0 ? ((comissoes / total) * 100).toFixed(0) : 0}%</span>
+          <span className="text-zinc-300 text-sm font-medium w-28 text-right">{fmt(comissoes)}</span>
+          <div className="w-3.5 h-3.5" />
+        </div>
+      )}
+
       {/* Total */}
       <div className="flex items-center justify-between pt-3 mt-2 border-t border-zinc-800">
         <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Total</span>
@@ -608,6 +635,8 @@ export default function CaixaPage() {
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [despesas, setDespesas] = useState<Despesa[]>([])
   const [capitalFora, setCapitalFora] = useState<CapitalFora[]>([])
+  const [folhaPrevista, setFolhaPrevista] = useState(0)
+  const [comissoesDoMes, setComissoesDoMes] = useState(0)
   const [loading, setLoading] = useState(true)
 
   // Section expand state
@@ -619,16 +648,46 @@ export default function CaixaPage() {
 
   async function loadAll() {
     setLoading(true)
-    const [cRes, ctRes, dRes, cfRes] = await Promise.all([
+    const [cRes, ctRes, dRes, cfRes, fRes, mrRes] = await Promise.all([
       fetch(`/api/caixa?mes=${mes}`),
       fetch('/api/contratos'),
       fetch(`/api/despesas?mes=${mes}`),
       fetch('/api/capital-fora-caixa'),
+      fetch(`/api/previsao-folha?mes=${mes}`),
+      fetch(`/api/metas-vendedor?mes=${mes}`),
     ])
     setCaixaRows(cRes.ok ? await cRes.json() : [])
-    setContratos(ctRes.ok ? await ctRes.json() : [])
+    const ctData = ctRes.ok ? await ctRes.json() : []
+    setContratos(ctData)
     setDespesas(dRes.ok ? await dRes.json() : [])
     setCapitalFora(cfRes.ok ? await cfRes.json() : [])
+
+    // Folha prevista
+    const fData = fRes.ok ? await fRes.json() : {}
+    setFolhaPrevista(fData?.valor ?? 0)
+
+    // Comissões do mês (mesma lógica do financeiro)
+    const metasArr: { vendedor: string; meta: number }[] = mrRes.ok ? await mrRes.json() : []
+    const metasMap: Record<string, number> = {}
+    if (Array.isArray(metasArr)) metasArr.forEach(mv => { metasMap[mv.vendedor] = mv.meta })
+    const doMes = Array.isArray(ctData) ? ctData.filter((c: { status: string; data_finalizacao: string | null; created_at: string }) => {
+      if (c.status !== 'finalizado') return false
+      const dr = c.data_finalizacao || c.created_at
+      return dr?.slice(0, 7) === mes
+    }) : []
+    let totalComissao = 0
+    for (const c of doMes) {
+      const temDois = !!(c as any).assistente && !!(c as any).analista
+      for (const nome of [(c as any).assistente, (c as any).analista]) {
+        if (!nome) continue
+        const taxa = temDois ? (c as any).taxa / 2 : (c as any).taxa
+        const meta = metasMap[nome] ?? 0
+        const pct = meta > 0 ? (taxa / meta) * 100 : 0
+        const perc = pct < 70 ? 0 : pct < 81 ? 1.5 : pct < 91 ? 2 : pct < 131 ? 3 : pct < 150 ? 4 : 5
+        totalComissao += taxa * (perc / 100)
+      }
+    }
+    setComissoesDoMes(totalComissao)
     setLoading(false)
   }
 
@@ -657,7 +716,8 @@ export default function CaixaPage() {
     // Usa o campo mes (competência) para não perder lançamentos com created_at em outro mês
     return d.mes === mes
   })
-  const totalDespesasPeriodo = despesasPeriodo.reduce((s, d) => s + (d.valor ?? 0), 0)
+  const totalDespesasDB = despesasPeriodo.reduce((s, d) => s + (d.valor ?? 0), 0)
+  const totalDespesasPeriodo = totalDespesasDB + folhaPrevista + comissoesDoMes
 
   // Caixa Total (conciliação)
   const caixaTotal = caixaDisponivel + totalCapitalEmOperacao + totalCapitalFora
@@ -895,7 +955,7 @@ export default function CaixaPage() {
           expanded={expDespesas}
           onToggle={() => setExpDespesas(v => !v)}
         >
-          <DespesasPorCategoria despesas={despesasPeriodo} />
+          <DespesasPorCategoria despesas={despesasPeriodo} folha={folhaPrevista} comissoes={comissoesDoMes} />
         </SectionBlock>
 
         <SectionBlock
