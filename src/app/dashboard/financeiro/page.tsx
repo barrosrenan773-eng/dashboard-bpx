@@ -681,23 +681,16 @@ const CATEGORIAS = [
   { key: 'servico_terceirizado', label: 'Serviço Terceirizado' },
   { key: 'impostos',             label: 'Impostos' },
   { key: 'taxas_bancarias',      label: 'Taxas Bancárias' },
-  { key: 'compra_divida',        label: 'Compra de Dívida' },
   { key: 'despesas_diversas',    label: 'Despesas Diversas' },
-  { key: 'devolucao_emprestimo', label: 'Devolução de Empréstimos' },
-  { key: 'bonificacao',          label: 'Bonificação' },
-  { key: 'pl',                   label: 'PL' },
   // legado
   { key: 'fixa',     label: 'Despesas Fixas' },
   { key: 'variavel', label: 'Despesas Variáveis' },
   { key: 'pix',      label: 'Tarifas Pix' },
-  { key: 'pessoal',  label: 'Despesas com Pessoal' },
 ]
 
 const CATEGORIAS_RECEITA = [
-  { key: 'emprestimo_divida', label: 'Empréstimo para Compra de Dívida' },
-  { key: 'comissao_banco',    label: 'Comissão de Banco' },
-  { key: 'taxa_servico',      label: 'Taxa de Serviço' },
-  { key: 'capital_giro',      label: 'Capital de Giro' },
+  { key: 'compra_divida', label: 'Compra de Dívida' },
+  { key: 'consignado',    label: 'Consignado' },
 ]
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
@@ -757,20 +750,31 @@ function KpiCard({
 
 // ─── Fluxo de Caixa Modal ────────────────────────────────────────────────────
 
+const CAT_LABELS: Record<string, string> = {
+  dept_pessoal: 'Depto Pessoal', beneficios: 'Benefícios', comissao_corretor: 'Comissão Corretor',
+  comissao_gerente: 'Comissão Gerente', marketing: 'Marketing', servico_terceirizado: 'Serv. Terceirizado',
+  impostos: 'Impostos', taxas_bancarias: 'Taxas Bancárias', despesas_diversas: 'Despesas Diversas',
+  compra_divida: 'Compra de Dívida', devolucao_emprestimo: 'Dev. Empréstimo', pl: 'PL',
+  bonificacao: 'Bonificação', fixa: 'Fixa', variavel: 'Variável', pix: 'Pix',
+  consignado: 'Consignado',
+}
+
 function FluxoCaixaModal({ mes, onClose }: { mes: string; onClose: () => void }) {
   const [mesSel, setMesSel] = useState(mes)
   const [dias, setDias] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [savingDia, setSavingDia] = useState<string | null>(null)
-  const [editValues, setEditValues] = useState<Record<string, { saldo_real: string; saldo_inicial: string; observacao: string }>>({})
   const [expandedDia, setExpandedDia] = useState<string | null>(null)
+  // Saldo inicial do mês — único campo manual
+  const [saldoInicialInput, setSaldoInicialInput] = useState('')
+  const [saldoInicialSalvo, setSaldoInicialSalvo] = useState<number | null>(null)
+  const [savingSaldoInicial, setSavingSaldoInicial] = useState(false)
+  // edição inline de descrição
+  const [editingDesc, setEditingDesc] = useState<string | null>(null)
+  const [editDescVal, setEditDescVal] = useState('')
+  const [savingDesc, setSavingDesc] = useState(false)
 
-  function fmt(v: number) {
-    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-  }
-  function getMesStr(d: Date) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-  }
+  function fmt(v: number) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
+  function getMesStr(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
   function navMes(delta: number) {
     const [y, m] = mesSel.split('-').map(Number)
     setMesSel(getMesStr(new Date(y, m - 1 + delta, 1)))
@@ -782,62 +786,113 @@ function FluxoCaixaModal({ mes, onClose }: { mes: string; onClose: () => void })
       fetch(`/api/historico-conciliacoes?mes=${mesSel}`).then(r => r.json()),
       fetch(`/api/fluxo-caixa?mes=${mesSel}`).then(r => r.json()),
     ]).then(([historico, saldos]) => {
+      // Saldo inicial do mês — pega o primeiro registro com saldo_inicial
+      const saldosArr = Array.isArray(saldos) ? saldos : []
       const saldoMap: Record<string, any> = {}
-      if (Array.isArray(saldos)) for (const s of saldos) saldoMap[s.data] = s
+      for (const s of saldosArr) saldoMap[s.data] = s
+
+      // Detecta saldo inicial salvo (primeiro dia do mês)
+      const diaUm = `${mesSel}-01`
+      const saldoInicialDb = saldoMap[diaUm]?.saldo_inicial
+      if (saldoInicialDb != null) {
+        setSaldoInicialSalvo(parseFloat(saldoInicialDb))
+        setSaldoInicialInput(String(saldoInicialDb))
+      } else {
+        setSaldoInicialSalvo(null)
+        setSaldoInicialInput('')
+      }
 
       const movPorDia: Record<string, any[]> = {}
       if (Array.isArray(historico)) {
         for (const h of historico) {
-          const detalhes: any[] = Array.isArray(h.detalhes) ? h.detalhes : []
-          for (const d of detalhes) {
-            const data: string = d.data || h.created_at?.slice(0, 10) || ''
-            if (!data || !data.startsWith(mesSel)) continue
-            // Fluxo de caixa: só mostra CREDIT (entradas) ou DEBIT com despesa_id (conciliado como despesa)
-            if (d.tipo !== 'CREDIT' && !d.despesa_id) continue
+          for (const d of (Array.isArray(h.detalhes) ? h.detalhes : [])) {
+            const data: string = d.data?.slice(0, 10) || h.created_at?.slice(0, 10) || ''
+            if (!data.startsWith(mesSel)) continue
             if (!movPorDia[data]) movPorDia[data] = []
-            movPorDia[data].push({ tipo: d.tipo === 'CREDIT' ? 'CREDIT' : 'DEBIT', valor: Math.abs(parseFloat(d.valor) || 0), descricao: d.descricao || '', categoria: d.categoria || '' })
+            movPorDia[data].push({
+              tipo: d.tipo === 'CREDIT' ? 'entrada' : 'saida',
+              valor: Math.abs(parseFloat(d.valor) || 0),
+              descricao: d.descricao || '',
+              categoria: d.categoria || '',
+              dre: !['compra_divida','pl','devolucao_emprestimo','bonificacao'].includes(d.categoria),
+              conciliacaoId: h.id,
+              fitid: d.fitid || null,
+            })
           }
         }
       }
 
       const [y, m] = mesSel.split('-').map(Number)
       const ultimoDia = new Date(y, m, 0).getDate()
-      let saldoAcumulado = 0
-      let saldoInicialEncontrado = false
+      // Usa saldo inicial salvo ou 0
+      let saldoAcumulado = saldoInicialDb != null ? parseFloat(saldoInicialDb) : 0
       const allDias: any[] = []
 
       for (let d = 1; d <= ultimoDia; d++) {
         const dataStr = `${mesSel}-${String(d).padStart(2, '0')}`
         const saldoDb = saldoMap[dataStr]
         const movs = movPorDia[dataStr] || []
-        const entradas = movs.filter((m: any) => m.tipo === 'CREDIT').reduce((s: number, m: any) => s + m.valor, 0)
-        const saidas = movs.filter((m: any) => m.tipo === 'DEBIT').reduce((s: number, m: any) => s + m.valor, 0)
-        if (saldoDb?.saldo_inicial != null && !saldoInicialEncontrado) { saldoAcumulado = parseFloat(saldoDb.saldo_inicial) || 0; saldoInicialEncontrado = true }
-        saldoAcumulado = saldoAcumulado + entradas - saidas
+        const entradas = movs.filter((m: any) => m.tipo === 'entrada').reduce((s: number, m: any) => s + m.valor, 0)
+        const saidas   = movs.filter((m: any) => m.tipo === 'saida').reduce((s: number, m: any) => s + m.valor, 0)
+        saldoAcumulado += entradas - saidas
+        // Saldo real: vindo do OFX automaticamente (salvo via LEDGERBAL)
         const saldoReal = saldoDb?.saldo_real != null ? parseFloat(saldoDb.saldo_real) : null
-        allDias.push({ data: dataStr, entradas, saidas, movimentos: movs, saldo_calculado: saldoAcumulado, saldo_real: saldoReal, saldo_inicial: saldoDb?.saldo_inicial != null ? parseFloat(saldoDb.saldo_inicial) : null, observacao: saldoDb?.observacao || '', divergente: saldoReal !== null && Math.abs(saldoAcumulado - saldoReal) > 0.01 })
+        allDias.push({
+          data: dataStr, entradas, saidas, movimentos: movs,
+          saldo_calculado: saldoAcumulado,
+          saldo_real: saldoReal,
+          divergente: saldoReal !== null && Math.abs(saldoAcumulado - saldoReal) > 0.01,
+        })
       }
 
       setDias(allDias)
-      const ev: Record<string, any> = {}
-      for (const d of allDias) ev[d.data] = { saldo_real: d.saldo_real != null ? String(d.saldo_real) : '', saldo_inicial: d.saldo_inicial != null ? String(d.saldo_inicial) : '', observacao: d.observacao }
-      setEditValues(ev)
       setLoading(false)
     })
   }, [mesSel])
 
-  async function salvarDia(data: string) {
-    const ev = editValues[data]
-    if (!ev) return
-    setSavingDia(data)
-    await fetch('/api/fluxo-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data, saldo_real: ev.saldo_real !== '' ? parseFloat(ev.saldo_real.replace(',', '.')) : null, saldo_inicial: ev.saldo_inicial !== '' ? parseFloat(ev.saldo_inicial.replace(',', '.')) : null, observacao: ev.observacao || null }) })
-    setSavingDia(null)
+  async function salvarSaldoInicial() {
+    const valor = parseFloat(saldoInicialInput.replace(',', '.'))
+    if (isNaN(valor)) return
+    setSavingSaldoInicial(true)
+    await fetch('/api/fluxo-caixa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: `${mesSel}-01`, saldo_inicial: valor }),
+    })
+    setSaldoInicialSalvo(valor)
+    setSavingSaldoInicial(false)
+    // Recalcula com novo saldo inicial
+    setDias(prev => {
+      let acc = valor
+      return prev.map(dia => {
+        acc += dia.entradas - dia.saidas
+        return { ...dia, saldo_calculado: acc, divergente: dia.saldo_real !== null && Math.abs(acc - dia.saldo_real) > 0.01 }
+      })
+    })
+  }
+
+  async function salvarDescricao(conciliacaoId: string, fitid: string, descricao: string) {
+    setSavingDesc(true)
+    await fetch('/api/historico-conciliacoes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: conciliacaoId, fitid, descricao }),
+    })
+    // Atualiza localmente
+    setDias(prev => prev.map(dia => ({
+      ...dia,
+      movimentos: dia.movimentos.map((m: any) =>
+        m.conciliacaoId === conciliacaoId && m.fitid === fitid ? { ...m, descricao } : m
+      ),
+    })))
+    setSavingDesc(false)
+    setEditingDesc(null)
   }
 
   const mesLabel = new Date(mesSel + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-  const totalEntradas = dias.reduce((s, d) => s + d.entradas, 0)
-  const totalSaidas = dias.reduce((s, d) => s + d.saidas, 0)
-  const saldoFinal = dias.length > 0 ? dias[dias.length - 1].saldo_calculado : 0
+  const totalEntradas   = dias.reduce((s, d) => s + d.entradas, 0)
+  const totalSaidas     = dias.reduce((s, d) => s + d.saidas, 0)
+  const saldoFinal      = dias.length > 0 ? dias[dias.length - 1].saldo_calculado : 0
   const diasDivergentes = dias.filter(d => d.divergente).length
 
   return (
@@ -852,22 +907,60 @@ function FluxoCaixaModal({ mes, onClose }: { mes: string; onClose: () => void })
               <span className="px-3 py-1 bg-zinc-900 rounded-lg text-xs font-medium capitalize min-w-[130px] text-center">{mesLabel}</span>
               <button onClick={() => navMes(1)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"><ChevronRight className="w-3.5 h-3.5" /></button>
             </div>
+            <span className="text-zinc-600 text-xs">Fonte: extrato OFX — clique na descrição para editar</span>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-4 gap-3 px-6 py-3 border-b border-zinc-800">
-          <div className="bg-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-xs">Entradas</p><p className="text-emerald-400 font-bold text-base mt-0.5">{fmt(totalEntradas)}</p></div>
-          <div className="bg-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-xs">Saídas</p><p className="text-red-400 font-bold text-base mt-0.5">{fmt(totalSaidas)}</p></div>
-          <div className="bg-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-xs">Saldo Calculado</p><p className={`font-bold text-base mt-0.5 ${saldoFinal >= 0 ? 'text-white' : 'text-red-400'}`}>{fmt(saldoFinal)}</p></div>
-          <div className="bg-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-xs">Divergências</p><p className={`font-bold text-base mt-0.5 ${diasDivergentes > 0 ? 'text-yellow-400' : 'text-zinc-400'}`}>{diasDivergentes} {diasDivergentes === 1 ? 'dia' : 'dias'}</p></div>
+        {/* Saldo inicial + KPIs */}
+        <div className="px-6 py-3 border-b border-zinc-800 flex items-center gap-6 flex-wrap">
+          {/* Campo único: saldo inicial do mês */}
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-500 text-xs whitespace-nowrap">Saldo inicial do mês:</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={saldoInicialInput}
+              onChange={e => setSaldoInicialInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && salvarSaldoInicial()}
+              placeholder="R$ 0,00"
+              className="w-36 bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500"
+            />
+            <button onClick={salvarSaldoInicial} disabled={savingSaldoInicial} className="flex items-center gap-1 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40 text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+              {savingSaldoInicial ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Salvar
+            </button>
+            {saldoInicialSalvo !== null && <span className="text-zinc-600 text-xs">salvo: {fmt(saldoInicialSalvo)}</span>}
+          </div>
+          <div className="flex items-center gap-4 ml-auto">
+            <div className="text-right"><p className="text-zinc-500 text-[10px]">Entradas</p><p className="text-emerald-400 font-bold text-sm">{fmt(totalEntradas)}</p></div>
+            <div className="text-right"><p className="text-zinc-500 text-[10px]">Saídas</p><p className="text-red-400 font-bold text-sm">{fmt(totalSaidas)}</p></div>
+            <div className="text-right"><p className="text-zinc-500 text-[10px]">Saldo atual</p><p className={`font-bold text-sm ${saldoFinal >= 0 ? 'text-white' : 'text-red-400'}`}>{fmt(saldoFinal)}</p></div>
+            {diasDivergentes > 0 && (
+              <div className="flex items-center gap-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
+                <span className="text-yellow-400 text-xs font-semibold">{diasDivergentes} divergência{diasDivergentes > 1 ? 's' : ''}</span>
+              </div>
+            )}
+            {diasDivergentes === 0 && dias.some(d => d.saldo_real !== null) && (
+              <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-400 text-xs font-semibold">Tudo conferido</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tabela */}
         <div className="overflow-y-auto flex-1">
           {loading ? (
             <div className="flex items-center justify-center py-16 text-zinc-500 text-sm">Carregando...</div>
+          ) : dias.every(d => d.movimentos.length === 0) ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2 text-zinc-500">
+              <FileText className="w-8 h-8 opacity-30" />
+              <p className="text-sm">Nenhum extrato OFX importado para {mesLabel}</p>
+              <p className="text-xs">Importe o extrato do banco na aba principal do Financeiro</p>
+            </div>
           ) : (
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800">
@@ -875,19 +968,17 @@ function FluxoCaixaModal({ mes, onClose }: { mes: string; onClose: () => void })
                   <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">Data</th>
                   <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Entradas</th>
                   <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Saídas</th>
-                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Saldo Calc.</th>
-                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium w-32">Saldo Inicial</th>
-                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium w-32">Saldo Real</th>
-                  <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">Observação</th>
-                  <th className="px-4 py-2.5 w-16"></th>
+                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Saldo</th>
+                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Saldo OFX</th>
+                  <th className="text-right px-4 py-2.5 text-zinc-500 font-medium">Diferença</th>
                 </tr>
               </thead>
               <tbody>
-                {dias.map((dia) => {
-                  const ev = editValues[dia.data] || { saldo_real: '', saldo_inicial: '', observacao: '' }
+                {dias.filter(d => d.movimentos.length > 0 || d.saldo_real !== null).map((dia) => {
                   const temMov = dia.movimentos.length > 0
                   const dataDisplay = new Date(dia.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
                   const isExpanded = expandedDia === dia.data
+                  const diff = dia.saldo_real !== null ? dia.saldo_calculado - dia.saldo_real : null
                   return (
                     <>
                       <tr key={dia.data} className={`border-b border-zinc-800/40 hover:bg-zinc-800/20 transition-colors ${dia.divergente ? 'bg-yellow-500/5' : ''}`}>
@@ -902,22 +993,46 @@ function FluxoCaixaModal({ mes, onClose }: { mes: string; onClose: () => void })
                         <td className="px-4 py-2 text-right">{dia.entradas > 0 ? <span className="text-emerald-400 font-medium">{fmt(dia.entradas)}</span> : <span className="text-zinc-700">—</span>}</td>
                         <td className="px-4 py-2 text-right">{dia.saidas > 0 ? <span className="text-red-400 font-medium">{fmt(dia.saidas)}</span> : <span className="text-zinc-700">—</span>}</td>
                         <td className="px-4 py-2 text-right"><span className={`font-semibold ${dia.saldo_calculado >= 0 ? 'text-zinc-300' : 'text-red-400'}`}>{fmt(dia.saldo_calculado)}</span></td>
-                        <td className="px-4 py-2"><input type="text" value={ev.saldo_inicial} onChange={e => setEditValues(prev => ({ ...prev, [dia.data]: { ...ev, saldo_inicial: e.target.value } }))} placeholder="—" className="w-full text-right bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500" /></td>
-                        <td className="px-4 py-2"><input type="text" value={ev.saldo_real} onChange={e => setEditValues(prev => ({ ...prev, [dia.data]: { ...ev, saldo_real: e.target.value } }))} placeholder="—" className={`w-full text-right bg-zinc-800 border rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 ${dia.divergente ? 'border-yellow-500/60' : 'border-zinc-700'}`} /></td>
-                        <td className="px-4 py-2"><input type="text" value={ev.observacao} onChange={e => setEditValues(prev => ({ ...prev, [dia.data]: { ...ev, observacao: e.target.value } }))} placeholder="—" className="w-full bg-transparent border-b border-zinc-800 px-1 py-1 text-xs text-zinc-400 placeholder-zinc-700 focus:outline-none focus:border-zinc-600" /></td>
-                        <td className="px-4 py-2 text-center"><button onClick={() => salvarDia(dia.data)} disabled={savingDia === dia.data} className="px-2 py-1 rounded text-xs bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40 transition-colors disabled:opacity-50">{savingDia === dia.data ? '...' : 'Salvar'}</button></td>
+                        <td className="px-4 py-2 text-right">{dia.saldo_real !== null ? <span className="text-blue-400 font-medium">{fmt(dia.saldo_real)}</span> : <span className="text-zinc-700">—</span>}</td>
+                        <td className="px-4 py-2 text-right">{diff !== null ? <span className={`font-semibold ${Math.abs(diff) < 0.01 ? 'text-emerald-400' : 'text-yellow-400'}`}>{Math.abs(diff) < 0.01 ? '✓' : fmt(diff)}</span> : <span className="text-zinc-700">—</span>}</td>
                       </tr>
                       {isExpanded && dia.movimentos.length > 0 && (
                         <tr key={`${dia.data}-expand`} className="bg-zinc-900/60">
-                          <td colSpan={8} className="px-8 py-2">
-                            <div className="space-y-1">
-                              {dia.movimentos.map((mov: any, i: number) => (
-                                <div key={i} className="flex items-center gap-3 py-0.5 border-b border-zinc-800/30 last:border-0">
-                                  <span className={`flex-shrink-0 ${mov.tipo === 'CREDIT' ? 'text-emerald-400' : 'text-red-400'}`}>{fmt(mov.valor)}</span>
-                                  <span className="text-zinc-400 flex-1 truncate">{mov.descricao || '—'}</span>
-                                  {mov.categoria && <span className="text-zinc-600 flex-shrink-0">{mov.categoria}</span>}
-                                </div>
-                              ))}
+                          <td colSpan={6} className="px-8 py-2">
+                            <div className="space-y-0.5">
+                              {dia.movimentos.map((mov: any, i: number) => {
+                                const descKey = `${mov.conciliacaoId}__${mov.fitid}`
+                                const isEditingThis = editingDesc === descKey
+                                return (
+                                  <div key={i} className="flex items-center gap-3 py-1 border-b border-zinc-800/30 last:border-0 group">
+                                    <span className={`font-semibold flex-shrink-0 w-24 text-right ${mov.tipo === 'entrada' ? 'text-emerald-400' : 'text-red-400'}`}>{fmt(mov.valor)}</span>
+                                    {isEditingThis ? (
+                                      <div className="flex items-center gap-1.5 flex-1">
+                                        <input
+                                          autoFocus
+                                          value={editDescVal}
+                                          onChange={e => setEditDescVal(e.target.value)}
+                                          onKeyDown={e => { if (e.key === 'Enter') salvarDescricao(mov.conciliacaoId, mov.fitid, editDescVal); if (e.key === 'Escape') setEditingDesc(null) }}
+                                          className="flex-1 bg-zinc-800 border border-emerald-500/50 text-white rounded px-2 py-0.5 text-xs focus:outline-none"
+                                        />
+                                        <button onClick={() => salvarDescricao(mov.conciliacaoId, mov.fitid, editDescVal)} disabled={savingDesc} className="text-emerald-400 hover:text-emerald-300"><Check className="w-3 h-3" /></button>
+                                        <button onClick={() => setEditingDesc(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3 h-3" /></button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => { if (!mov.fitid) return; setEditingDesc(descKey); setEditDescVal(mov.descricao) }}
+                                        className={`flex-1 text-left truncate ${mov.fitid ? 'text-zinc-400 hover:text-white cursor-pointer group-hover:underline decoration-zinc-700' : 'text-zinc-500 cursor-default'}`}
+                                        title={mov.fitid ? 'Clique para editar descrição' : undefined}
+                                      >
+                                        {mov.descricao || '—'}
+                                        {mov.fitid && <Pencil className="inline ml-1.5 w-2.5 h-2.5 opacity-0 group-hover:opacity-50" />}
+                                      </button>
+                                    )}
+                                    <span className="text-zinc-600 flex-shrink-0">{CAT_LABELS[mov.categoria] || mov.categoria}</span>
+                                    {!mov.dre && <span className="text-zinc-600 text-[10px] flex-shrink-0 italic border border-zinc-700 px-1 rounded">fora DRE</span>}
+                                  </div>
+                                )
+                              })}
                             </div>
                           </td>
                         </tr>
@@ -953,6 +1068,10 @@ export default function FinanceiroPage() {
   const [saving, setSaving] = useState(false)
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
   const [empresaFiltro, setEmpresaFiltro] = useState<Empresa | ''>('')
+  const [despPeriodoInicio, setDespPeriodoInicio] = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+  })
+  const [despPeriodoFim, setDespPeriodoFim] = useState(() => new Date().toISOString().slice(0, 10))
 
   // Refs para scroll
   const dreRef = useRef<HTMLDivElement>(null)
@@ -970,10 +1089,13 @@ export default function FinanceiroPage() {
   const [ofxConciliando, setOfxConciliando] = useState(false)
   const [ofxConciliandoFitid, setOfxConciliandoFitid] = useState<string | null>(null)
   const [ofxDone, setOfxDone] = useState(0)
+  const [ofxSaldo, setOfxSaldo] = useState<{ valor: number; data: string } | null>(null)
   const [historicoConciliacoes, setHistoricoConciliacoes] = useState<{id: string; created_at: string; mes_referencia: string; qtd_transacoes: number; valor_total: number; detalhes: {despesa_id?: number; descricao: string; categoria: string; valor: number; fitid?: string; tipo?: string; data?: string; mes?: string}[]}[]>([])
   const [historicoExpanded, setHistoricoExpanded] = useState<Set<string>>(new Set())
-  const [histFiltro, setHistFiltro] = useState<'hoje' | 'periodo'>('hoje')
-  const [histInicio, setHistInicio] = useState(() => new Date().toISOString().slice(0, 10))
+  const [histFiltro, setHistFiltro] = useState<'hoje' | 'periodo'>('periodo')
+  const [histInicio, setHistInicio] = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+  })
   const [histFim, setHistFim] = useState(() => new Date().toISOString().slice(0, 10))
   const [histPage, setHistPage] = useState(1)
   const HIST_PER_PAGE = 15
@@ -996,10 +1118,16 @@ export default function FinanceiroPage() {
     setDespesas(Array.isArray(data) ? data : [])
   }
 
-  async function loadContratos() {
+  async function loadContratos(m: string) {
     const r = await fetch('/api/contratos')
     const data = await r.json()
-    const total = Array.isArray(data) ? data.filter((c: { status?: string }) => c.status === 'finalizado').reduce((s: number, c: { taxa?: number }) => s + (c.taxa ?? 0), 0) : 0
+    const total = Array.isArray(data)
+      ? data.filter((c: { status?: string; data_finalizacao?: string; created_at?: string }) => {
+          if (c.status !== 'finalizado') return false
+          const ref = c.data_finalizacao || c.created_at
+          return ref?.slice(0, 7) === m
+        }).reduce((s: number, c: { taxa?: number }) => s + (c.taxa ?? 0), 0)
+      : 0
     setReceita(total)
   }
 
@@ -1035,7 +1163,7 @@ export default function FinanceiroPage() {
           ? allDespesas.filter(d => d.mes === m || d.created_at?.slice(0, 7) === m).reduce((s, d) => s + Number(d.valor), 0)
           : 0
         rMap[m] = Array.isArray(allContratos)
-          ? allContratos.filter(c => c.created_at?.slice(0, 7) === m).reduce((s, c) => s + (c.taxa ?? 0), 0)
+          ? allContratos.filter(c => ((c as any).data_finalizacao || c.created_at)?.slice(0, 7) === m).reduce((s, c) => s + (c.taxa ?? 0), 0)
           : 0
       })
       setHistDespesas(dMap)
@@ -1051,9 +1179,79 @@ export default function FinanceiroPage() {
     setReceitasManuais(Array.isArray(data) ? data : [])
   }
 
+  const [folhaPrevista, setFolhaPrevista] = useState(0)
+  const [folhaInput, setFolhaInput] = useState('')
+  const [savingFolha, setSavingFolha] = useState(false)
+  const [comissoesDoMes, setComissoesDoMes] = useState(0)
+  const [comissoesPorPessoa, setComissoesPorPessoa] = useState<{ nome: string; taxa: number; pctMeta: number; percComissao: number; comissao: number }[]>([])
+
+  async function loadFolha(m: string) {
+    const r = await fetch(`/api/previsao-folha?mes=${m}`)
+    const data = await r.json()
+    const val = data?.valor ?? 0
+    setFolhaPrevista(val)
+    setFolhaInput(val > 0 ? String(val) : '')
+  }
+
+  async function loadComissoes(m: string) {
+    try {
+      const [cr, mr] = await Promise.all([
+        fetch('/api/contratos'),
+        fetch(`/api/metas-vendedor?mes=${m}`),
+      ])
+      const contratos: { status: string; taxa: number; assistente: string | null; analista: string | null; data_finalizacao: string | null; created_at: string }[] = cr.ok ? await cr.json() : []
+      const metasArr: { vendedor: string; meta: number }[] = mr.ok ? await mr.json() : []
+      const metasMap: Record<string, number> = {}
+      if (Array.isArray(metasArr)) metasArr.forEach(mv => { metasMap[mv.vendedor] = mv.meta })
+
+      const doMes = contratos.filter(c => {
+        if (c.status !== 'finalizado') return false
+        const dr = c.data_finalizacao || c.created_at
+        return dr?.slice(0, 7) === m
+      })
+
+      // Taxa proporcional por pessoa
+      const taxaMap: Record<string, number> = {}
+      for (const c of doMes) {
+        const temDois = !!c.assistente && !!c.analista
+        for (const nome of [c.assistente, c.analista]) {
+          if (!nome) continue
+          taxaMap[nome] = (taxaMap[nome] ?? 0) + (temDois ? c.taxa / 2 : c.taxa)
+        }
+      }
+
+      // Calcular comissão por pessoa e somar
+      let total = 0
+      const resumo = []
+      for (const [nome, taxa] of Object.entries(taxaMap)) {
+        const meta = metasMap[nome] ?? 0
+        const pctMeta = meta > 0 ? (taxa / meta) * 100 : 0
+        const percComissao = pctMeta < 70 ? 0 : pctMeta < 81 ? 1.5 : pctMeta < 91 ? 2 : pctMeta < 131 ? 3 : pctMeta < 150 ? 4 : 5
+        const comissao = taxa * (percComissao / 100)
+        total += comissao
+        resumo.push({ nome, taxa, pctMeta, percComissao, comissao })
+      }
+      resumo.sort((a, b) => b.comissao - a.comissao)
+      setComissoesDoMes(total)
+      setComissoesPorPessoa(resumo)
+    } catch { /* silent */ }
+  }
+
+  async function salvarFolha() {
+    setSavingFolha(true)
+    const valor = parseFloat(folhaInput.replace(',', '.')) || 0
+    await fetch('/api/previsao-folha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mes, valor }),
+    })
+    setFolhaPrevista(valor)
+    setSavingFolha(false)
+  }
+
   async function load(m: string) {
     setLoading(true)
-    await Promise.all([loadDespesas(m), loadContratos(), loadMetaAds(m), loadReceitas(m)])
+    await Promise.all([loadDespesas(m), loadContratos(m), loadMetaAds(m), loadReceitas(m), loadFolha(m), loadComissoes(m)])
     setLoading(false)
   }
 
@@ -1097,10 +1295,22 @@ export default function FinanceiroPage() {
   }, [])
 
   const despesasFiltradas = (empresaFiltro ? despesas.filter(d => d.empresa === empresaFiltro) : despesas)
-    .filter(d => d.categoria !== 'compra_divida' && d.categoria !== 'pl')
+    .filter(d => !['compra_divida', 'pl', 'devolucao_emprestimo', 'bonificacao'].includes(d.categoria))
+
+  // Despesas filtradas por período customizado (para a seção "Despesas por Categoria")
+  const despesasPeriodo = despesas
+    .filter(d => !['compra_divida', 'pl', 'devolucao_emprestimo', 'bonificacao'].includes(d.categoria))
+    .filter(d => {
+      const data = (d.created_at ?? '').slice(0, 10)
+      return data >= despPeriodoInicio && data <= despPeriodoFim
+    })
+  const totalDespesasPeriodo = despesasPeriodo.reduce((s, d) => s + Number(d.valor), 0)
   const receitasFiltradas = empresaFiltro ? receitasManuais.filter(r => r.empresa === empresaFiltro) : receitasManuais
   const receitaContratosF = empresaFiltro ? 0 : receita // contratos não têm empresa ainda
-  const totalDespesas = despesasFiltradas.reduce((s, d) => s + Number(d.valor), 0) + (empresaFiltro ? 0 : (metaAdsSpend ?? 0))
+  const totalDespesas = despesasFiltradas.reduce((s, d) => s + Number(d.valor), 0)
+    + (empresaFiltro ? 0 : (metaAdsSpend ?? 0))
+    + (empresaFiltro ? 0 : folhaPrevista)
+    + (empresaFiltro ? 0 : comissoesDoMes)
   const totalReceitasManuais = receitasFiltradas.reduce((s, r) => s + Number(r.valor), 0)
   const receitaTotal = receitaContratosF + totalReceitasManuais
   const lucro = receitaTotal - totalDespesas
@@ -1213,6 +1423,7 @@ export default function FinanceiroPage() {
       const json = await res.json()
       if (json.error) { setOfxError(json.error); setOfxLoading(false); return }
       const allTxs: OFXTransaction[] = json.transactions ?? []
+      setOfxSaldo(json.saldo ?? null)
       // Filtra FITIDs já conciliados no histórico
       const fitidsConciliados = new Set(
         historicoConciliacoes.flatMap(h => (h.detalhes ?? []).map(d => d.fitid).filter(Boolean))
@@ -1240,6 +1451,16 @@ export default function FinanceiroPage() {
     e.target.value = ''
   }
 
+  // Salva automaticamente o saldo do extrato OFX no fluxo de caixa
+  async function salvarSaldoOFX() {
+    if (!ofxSaldo) return
+    await fetch('/api/fluxo-caixa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: ofxSaldo.data, saldo_real: ofxSaldo.valor }),
+    })
+  }
+
   async function handleConciliar() {
     const toCreate = ofxTxs.filter(t => ofxCats[t.fitid] && ofxCats[t.fitid] !== 'ignorar')
     if (toCreate.length === 0) return
@@ -1264,11 +1485,13 @@ export default function FinanceiroPage() {
         detalhes: toCreate.map(t => ({ descricao: ofxDescricoes[t.fitid] || t.descricao, categoria: ofxCats[t.fitid], valor: t.valor })),
       }),
     })
+    await salvarSaldoOFX()
     loadHistorico()
     setOfxTxs([])
     setOfxCats({})
     setOfxDescricoes({})
     setOfxEmpresas({})
+    setOfxSaldo(null)
     setOfxConciliando(false)
     loadDespesas(mes)
   }
@@ -1323,6 +1546,8 @@ export default function FinanceiroPage() {
       setOfxTxs(prev => {
         const restantes = prev.filter(x => x.fitid !== t.fitid)
         if (restantes.length === 0) {
+          salvarSaldoOFX()
+          setOfxSaldo(null)
           sessionStorage.removeItem('ofx_txs')
           sessionStorage.removeItem('ofx_cats')
           sessionStorage.removeItem('ofx_descs')
@@ -1496,6 +1721,48 @@ export default function FinanceiroPage() {
           </ResponsiveContainer>
         </div>
 
+        {/* ── FOLHA E COMISSÕES ── */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-zinc-800">
+            <h3 className="text-white font-semibold text-base">Folha e Comissões — {formatMesLabel(mes)}</h3>
+            <p className="text-zinc-500 text-xs mt-0.5">Previsão de folha manual + comissões calculadas automaticamente dos contratos</p>
+          </div>
+          <div className="p-6 space-y-4">
+            {/* Folha prevista */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-zinc-300 text-sm font-medium">Previsão de Folha</p>
+                <p className="text-zinc-500 text-xs mt-0.5">Valor bruto da folha de pagamento do mês</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={folhaInput}
+                  onChange={e => setFolhaInput(e.target.value)}
+                  placeholder="0,00"
+                  className="w-40 bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                <button
+                  onClick={salvarFolha}
+                  disabled={savingFolha}
+                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+                >
+                  {savingFolha ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Salvar
+                </button>
+                {folhaPrevista > 0 && (
+                  <span className="text-emerald-400 font-semibold text-sm">{formatCurrency(folhaPrevista)}</span>
+                )}
+              </div>
+            </div>
+            {comissoesDoMes > 0 && (
+              <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+                <p className="text-zinc-500 text-xs">Comissões calculadas automaticamente: <span className="text-amber-400 font-semibold">{formatCurrency(comissoesDoMes)}</span> — somadas em Departamento Pessoal no DRE</p>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* ── DRE ── */}
         <div ref={dreRef} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-zinc-800">
@@ -1588,22 +1855,53 @@ export default function FinanceiroPage() {
 
               {/* DESPESAS POR CATEGORIA */}
               <div>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-3">
                   <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest">Despesas por Categoria</p>
-                  <span className="text-red-400 font-bold text-sm">{formatCurrency(totalDespesas)}</span>
+                  <span className="text-red-400 font-bold text-sm">{formatCurrency(totalDespesasPeriodo)}</span>
+                </div>
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <span className="text-zinc-500 text-xs">Período:</span>
+                  <input
+                    type="date"
+                    value={despPeriodoInicio}
+                    onChange={e => setDespPeriodoInicio(e.target.value)}
+                    className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-violet-500"
+                  />
+                  <span className="text-zinc-600 text-xs">até</span>
+                  <input
+                    type="date"
+                    value={despPeriodoFim}
+                    onChange={e => setDespPeriodoFim(e.target.value)}
+                    className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-violet-500"
+                  />
+                  <button
+                    onClick={() => {
+                      const d = new Date()
+                      const ini = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+                      setDespPeriodoInicio(ini)
+                      setDespPeriodoFim(d.toISOString().slice(0, 10))
+                    }}
+                    className="text-zinc-500 hover:text-zinc-300 text-xs px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 hover:border-zinc-500 transition-colors"
+                  >
+                    Mês atual
+                  </button>
                 </div>
 
                 {/* Barra visual empilhada */}
-                {totalDespesas > 0 && (() => {
+                {totalDespesasPeriodo > 0 && (() => {
                   const BAR_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#6366f1','#a855f7','#ec4899','#14b8a6','#f59e0b','#84cc16','#3b82f6']
                   const cats = [
                     ...(metaAdsSpend && !empresaFiltro ? [{ key: '__marketing__', valor: metaAdsSpend }] : []),
-                    ...CATEGORIAS.map(({ key }) => ({ key, valor: despesasFiltradas.filter(d => d.categoria === key).reduce((s, d) => s + Number(d.valor), 0) })).filter(c => c.valor > 0),
+                    ...CATEGORIAS.map(({ key }) => {
+                      const base = despesasPeriodo.filter(d => d.categoria === key).reduce((s, d) => s + Number(d.valor), 0)
+                      const extra = (key === 'dept_pessoal' && !empresaFiltro) ? folhaPrevista + comissoesDoMes : 0
+                      return { key, valor: base + extra }
+                    }).filter(c => c.valor > 0),
                   ].sort((a, b) => b.valor - a.valor)
                   return (
                     <div className="flex h-3 rounded-full overflow-hidden mb-5">
                       {cats.map((c, i) => (
-                        <div key={c.key} style={{ width: `${(c.valor / totalDespesas) * 100}%`, background: BAR_COLORS[i % BAR_COLORS.length] }} />
+                        <div key={c.key} style={{ width: `${(c.valor / totalDespesasPeriodo) * 100}%`, background: BAR_COLORS[i % BAR_COLORS.length] }} />
                       ))}
                     </div>
                   )
@@ -1618,9 +1916,9 @@ export default function FinanceiroPage() {
                         <span className="text-zinc-300 text-sm flex-1 text-left">Marketing</span>
                         <span className="text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full">auto</span>
                         <div className="w-24 mx-2 bg-zinc-800 rounded-full h-1.5">
-                          <div className="h-1.5 rounded-full" style={{ width: `${Math.min((metaAdsSpend / totalDespesas) * 100, 100)}%`, background: '#f97316', opacity: 0.7 }} />
+                          <div className="h-1.5 rounded-full" style={{ width: `${Math.min((metaAdsSpend / totalDespesasPeriodo) * 100, 100)}%`, background: '#f97316', opacity: 0.7 }} />
                         </div>
-                        <span className="text-zinc-500 text-xs w-10 text-right">{totalDespesas > 0 ? ((metaAdsSpend / totalDespesas) * 100).toFixed(0) : 0}%</span>
+                        <span className="text-zinc-500 text-xs w-10 text-right">{totalDespesasPeriodo > 0 ? ((metaAdsSpend / totalDespesasPeriodo) * 100).toFixed(0) : 0}%</span>
                         <span className="text-zinc-300 text-sm font-medium w-28 text-right">{formatCurrency(metaAdsSpend)}</span>
                         {expandedCats.has('__marketing__') ? <ChevronUp className="w-3.5 h-3.5 text-zinc-600" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-600" />}
                       </button>
@@ -1640,16 +1938,17 @@ export default function FinanceiroPage() {
                     const BAR_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#6366f1','#a855f7','#ec4899','#14b8a6','#f59e0b','#84cc16','#3b82f6']
                     const colorOffset = (metaAdsSpend && !empresaFiltro) ? 1 : 0
                     return [...CATEGORIAS]
-                      .map(({ key, label }) => ({
-                        key, label,
-                        items: despesasFiltradas.filter(d => d.categoria === key),
-                        subtotal: despesasFiltradas.filter(d => d.categoria === key).reduce((s, d) => s + Number(d.valor), 0),
-                      }))
+                      .map(({ key, label }) => {
+                        const items = despesasPeriodo.filter(d => d.categoria === key)
+                        const base = items.reduce((s, d) => s + Number(d.valor), 0)
+                        const extra = (key === 'dept_pessoal' && !empresaFiltro) ? folhaPrevista + comissoesDoMes : 0
+                        return { key, label, items, subtotal: base + extra }
+                      })
                       .sort((a, b) => b.subtotal - a.subtotal)
                       .map(({ key, label, items, subtotal }, idx) => {
                         const isExpanded = expandedCats.has(key)
                         const isAddingThis = adding?.categoria === key
-                        const pct = totalDespesas > 0 ? (subtotal / totalDespesas) * 100 : 0
+                        const pct = totalDespesasPeriodo > 0 ? (subtotal / totalDespesasPeriodo) * 100 : 0
                         const color = BAR_COLORS[(idx + colorOffset) % BAR_COLORS.length]
                         return (
                           <div key={key}>
@@ -1695,6 +1994,32 @@ export default function FinanceiroPage() {
                                     )}
                                   </div>
                                 ))}
+                                {/* Folha e comissões como sub-itens virtuais em dept_pessoal */}
+                                {key === 'dept_pessoal' && !empresaFiltro && folhaPrevista > 0 && (
+                                  <div className="flex items-center justify-between py-1">
+                                    <span className="text-zinc-500 text-xs flex-1">Folha de Pagamento
+                                      <span className="ml-1.5 text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1 py-0.5 rounded-full text-[10px]">previsão</span>
+                                    </span>
+                                    <span className="text-zinc-400 text-xs font-medium">{formatCurrency(folhaPrevista)}</span>
+                                  </div>
+                                )}
+                                {key === 'dept_pessoal' && !empresaFiltro && comissoesDoMes > 0 && (
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center justify-between py-1">
+                                      <span className="text-zinc-500 text-xs flex-1 font-medium">Comissões (contratos)
+                                        <span className="ml-1.5 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1 py-0.5 rounded-full text-[10px]">auto</span>
+                                      </span>
+                                      <span className="text-zinc-400 text-xs font-medium">{formatCurrency(comissoesDoMes)}</span>
+                                    </div>
+                                    {comissoesPorPessoa.map(p => (
+                                      <div key={p.nome} className="flex items-center justify-between py-0.5 pl-3">
+                                        <span className="text-zinc-600 text-xs flex-1">{p.nome}</span>
+                                        <span className="text-zinc-600 text-xs mr-3">{p.pctMeta.toFixed(0)}% da meta · {p.percComissao}%</span>
+                                        <span className="text-zinc-500 text-xs font-medium">{formatCurrency(p.comissao)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                                 {isAddingThis ? (
                                   <div className="flex items-center gap-2 py-1">
                                     <input autoFocus value={adding.descricao} onChange={e => setAdding(s => s ? { ...s, descricao: e.target.value } : s)} placeholder="Descrição" className="flex-1 bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-500" />
@@ -1808,9 +2133,16 @@ export default function FinanceiroPage() {
           {ofxTxs.length > 0 ? (
             <div className="p-6">
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-zinc-400 text-sm">
-                  <span className="text-white font-semibold">{ofxTxs.length}</span> transações de <span className="text-white font-semibold">{formatMesLabel(mes)}</span>
-                  {ofxParaConciliar > 0 && <span className="text-emerald-400"> · {ofxParaConciliar} serão lançadas</span>}
+                <p className="text-zinc-400 text-sm flex items-center gap-3">
+                  <span><span className="text-white font-semibold">{ofxTxs.length}</span> transações de <span className="text-white font-semibold">{formatMesLabel(mes)}</span></span>
+                  {ofxParaConciliar > 0 && <span className="text-emerald-400">· {ofxParaConciliar} serão lançadas</span>}
+                  {ofxSaldo && (
+                    <span className="text-zinc-500 text-xs flex items-center gap-1">
+                      · saldo do extrato: <span className="text-blue-400 font-semibold">{ofxSaldo.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                      <span className="text-zinc-600">({new Date(ofxSaldo.data + 'T12:00:00').toLocaleDateString('pt-BR')})</span>
+                      <span className="text-zinc-600 italic">— será salvo automaticamente no fluxo de caixa</span>
+                    </span>
+                  )}
                 </p>
                 <div className="flex items-center gap-2">
                   <button onClick={() => { setOfxTxs([]); setOfxCats({}); setOfxDescricoes({}); setOfxEmpresas({}); setOfxAviso(''); sessionStorage.removeItem('ofx_txs'); sessionStorage.removeItem('ofx_cats'); sessionStorage.removeItem('ofx_descs'); sessionStorage.removeItem('ofx_emps') }} className="text-zinc-500 hover:text-zinc-300 text-xs transition-colors">
@@ -1871,6 +2203,11 @@ export default function FinanceiroPage() {
                               {CATEGORIAS.filter(c => !['fixa','variavel','pix','pessoal'].includes(c.key)).map(c => (
                                 <option key={c.key} value={c.key}>{c.label}</option>
                               ))}
+                              <option disabled>── Fluxo de Caixa ──</option>
+                              <option value="compra_divida">Compra de Dívida</option>
+                              <option value="devolucao_emprestimo">Devolução de Empréstimo</option>
+                              <option value="pl">PL</option>
+                              <option value="bonificacao">Bonificação</option>
                             </select>
                           </td>
                           <td className="py-2 px-2">
@@ -1915,9 +2252,14 @@ export default function FinanceiroPage() {
         {(() => {
           const hoje = new Date().toISOString().slice(0, 10)
           const histFiltrados = historicoConciliacoes.filter(h => {
-            const dia = h.created_at.slice(0, 10)
-            if (histFiltro === 'hoje') return dia === hoje
-            return dia >= histInicio && dia <= histFim
+            // Usa a data das transações do extrato (detalhes[].data), não a data de importação
+            const datas = (h.detalhes ?? []).map((d: { data?: string }) => d.data?.slice(0, 10)).filter(Boolean) as string[]
+            if (histFiltro === 'hoje') {
+              return datas.some(d => d === hoje) || h.created_at.slice(0, 10) === hoje
+            }
+            // Mostra se qualquer transação do lote cair no período selecionado
+            return datas.some(d => d >= histInicio && d <= histFim)
+              || h.created_at.slice(0, 10) >= histInicio && h.created_at.slice(0, 10) <= histFim
           })
           const histTotal = histFiltrados.length
           const histPages = Math.max(1, Math.ceil(histTotal / HIST_PER_PAGE))

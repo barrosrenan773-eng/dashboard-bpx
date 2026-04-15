@@ -1,3 +1,25 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/parcelas",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/alertas/whatsapp?tipo=insights-consultores",
+      "schedule": "0 11 * * 1-5"
+    },
+    {
+      "path": "/api/alertas/whatsapp?tipo=relatorio",
+      "schedule": "30 11 * * 1-5"
+    },
+    {
+      "path": "/api/alertas/whatsapp?tipo=alertas",
+      "schedule": "0 14 * * 1-5"
+    },
+    {
+      "path": "/api/alertas/whatsapp?tipo=resumo-semanal",
+      "schedule": "0 13 * * 6"
+    }
+  ]
 }

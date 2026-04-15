@@ -22,6 +22,10 @@ type Contrato = {
   arquivo_url: string | null
   arquivo_nome: string | null
   observacoes: string | null
+  telefone: string | null
+  cpf: string | null
+  assistente: string | null
+  analista: string | null
   created_at: string
 }
 
@@ -38,7 +42,6 @@ const STATUS_STYLE: Record<Contrato['status'], string> = {
 const SERVICOS = [
   'Compra de Dívida',
   'Consignado',
-  'Remuneração Diferida',
 ] as const
 
 const ORIGENS = ['BPX', 'CCA1', 'CCA2'] as const
@@ -52,6 +55,10 @@ const EMPTY_FORM = {
   status: 'aguardando' as Contrato['status'],
   data_finalizacao: '',
   observacoes: '',
+  telefone: '',
+  cpf: '',
+  assistente: '',
+  analista: '',
 }
 
 function KpiCard({
@@ -77,12 +84,19 @@ function KpiCard({
 export default function ContratosPage() {
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [filtroServico, setFiltroServico] = useState<string>('todos')
+  const [filtroPessoa, setFiltroPessoa] = useState<string>('todos')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [editId, setEditId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [consultores, setConsultores] = useState<{ id: string; nome: string }[]>([])
+  const [metas, setMetas] = useState<Record<string, number>>({}) // nome → meta em R$
+  const [mesComissao, setMesComissao] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
 
   // Arquivo anexo
   const anexoRef = useRef<HTMLInputElement>(null)
@@ -91,11 +105,29 @@ export default function ContratosPage() {
 
   async function load() {
     setLoading(true)
-    const r = await fetch('/api/contratos')
+    const [r, cu] = await Promise.all([
+      fetch('/api/contratos'),
+      fetch('/api/clint/usuarios'),
+    ])
     const data = await r.json()
+    const cuData = await cu.json()
     setContratos(Array.isArray(data) ? data : [])
+    setConsultores(Array.isArray(cuData) ? cuData : [])
     setLoading(false)
   }
+
+  async function carregarMetas(mes: string) {
+    const r = await fetch(`/api/metas-vendedor?mes=${mes}`)
+    const data = await r.json()
+    if (Array.isArray(data)) {
+      const map: Record<string, number> = {}
+      data.forEach((m: { vendedor: string; meta: number }) => { map[m.vendedor] = m.meta })
+      setMetas(map)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+  useEffect(() => { carregarMetas(mesComissao) }, [mesComissao])
 
   useEffect(() => { load() }, [])
 
@@ -115,6 +147,10 @@ export default function ContratosPage() {
       status: form.status,
       data_finalizacao: form.data_finalizacao || null,
       observacoes: form.observacoes || null,
+      telefone: form.telefone || null,
+      cpf: form.cpf || null,
+      assistente: form.assistente || null,
+      analista: form.analista || null,
     }
     const res = editId
       ? await fetch('/api/contratos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editId, ...body }) })
@@ -161,6 +197,10 @@ export default function ContratosPage() {
       status: c.status,
       data_finalizacao: c.data_finalizacao ?? '',
       observacoes: c.observacoes ?? '',
+      telefone: c.telefone ?? '',
+      cpf: c.cpf ?? '',
+      assistente: c.assistente ?? '',
+      analista: c.analista ?? '',
     })
     setEditId(c.id)
     setAnexoFile(null)
@@ -182,15 +222,85 @@ export default function ContratosPage() {
     load()
   }
 
-  const contratosFiltrados = filtroServico === 'todos'
+  // Regra de divisão de taxa:
+  // - assistente + analista → 50% cada
+  // - só um deles → 100% para quem tem
+  function taxaPessoa(c: Contrato, nome: string): number {
+    const temAssist = !!c.assistente
+    const temAnalista = !!c.analista
+    const ehAssist = c.assistente === nome
+    const ehAnalista = c.analista === nome
+    if (!ehAssist && !ehAnalista) return 0
+    if (temAssist && temAnalista) return c.taxa / 2
+    return c.taxa
+  }
+
+  // Tabela de comissão BPX
+  function calcularPercentualComissao(pct: number): number {
+    if (pct < 70)  return 0
+    if (pct < 81)  return 1.5
+    if (pct < 91)  return 2
+    if (pct < 131) return 3
+    if (pct < 150) return 4
+    return 5
+  }
+
+  // Contratos finalizados do mês selecionado para cálculo de comissão
+  const contratosDoMes = contratos.filter(c => {
+    if (c.status !== 'finalizado') return false
+    const dataRef = c.data_finalizacao || c.created_at
+    return dataRef?.slice(0, 7) === mesComissao
+  })
+
+  // Resumo por pessoa — todos os contratos (para painel de produção)
+  const pessoasMap: Record<string, { nome: string; qtd: number; taxa: number }> = {}
+  for (const c of contratos) {
+    for (const nome of [c.assistente, c.analista]) {
+      if (!nome) continue
+      if (!pessoasMap[nome]) pessoasMap[nome] = { nome, qtd: 0, taxa: 0 }
+      pessoasMap[nome].qtd++
+      pessoasMap[nome].taxa += taxaPessoa(c, nome)
+    }
+  }
+  const resumoPessoas = Object.values(pessoasMap).sort((a, b) => b.taxa - a.taxa)
+
+  // Resumo de comissão — contratos finalizados do mês selecionado
+  const comissoesMap: Record<string, { nome: string; qtd: number; taxa: number; meta: number; pct: number; percComissao: number; comissao: number }> = {}
+  for (const c of contratosDoMes) {
+    for (const nome of [c.assistente, c.analista]) {
+      if (!nome) continue
+      if (!comissoesMap[nome]) {
+        const meta = metas[nome] ?? 0
+        comissoesMap[nome] = { nome, qtd: 0, taxa: 0, meta, pct: 0, percComissao: 0, comissao: 0 }
+      }
+      comissoesMap[nome].qtd++
+      comissoesMap[nome].taxa += taxaPessoa(c, nome)
+    }
+  }
+  // Calcular % atingido e comissão após somar todas as taxas
+  const resumoComissoes = Object.values(comissoesMap).map(p => {
+    const pct = p.meta > 0 ? (p.taxa / p.meta) * 100 : 0
+    const percComissao = calcularPercentualComissao(pct)
+    const comissao = p.taxa * (percComissao / 100)
+    return { ...p, pct, percComissao, comissao }
+  }).sort((a, b) => b.taxa - a.taxa)
+
+  // Filtros encadeados: serviço → pessoa
+  const contratosPorServico = filtroServico === 'todos'
     ? contratos
     : contratos.filter(c => c.servico === filtroServico)
+
+  const contratosFiltrados = filtroPessoa === 'todos'
+    ? contratosPorServico
+    : contratosPorServico.filter(c => c.assistente === filtroPessoa || c.analista === filtroPessoa)
 
   const totalCapital = contratos.reduce((s, c) => s + c.capital, 0)
   const totalTaxas = contratos.reduce((s, c) => s + c.taxa, 0)
   const totalGeral = totalCapital + totalTaxas
   const totalFinalizados = contratos.filter(c => c.status === 'finalizado').length
   const emAndamento = contratos.filter(c => c.status !== 'finalizado').length
+  // Receita do mês selecionado (mesma lógica do financeiro)
+  const receitaDoMes = contratosDoMes.reduce((s, c) => s + c.taxa, 0)
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950">
@@ -219,9 +329,9 @@ export default function ContratosPage() {
             bgClass="bg-blue-500/10"
           />
           <KpiCard
-            label={L.receitaTotal}
-            value={formatCurrency(totalTaxas)}
-            sub="soma das taxas"
+            label={L.receita}
+            value={formatCurrency(receitaDoMes)}
+            sub={`finalizados em ${mesComissao}`}
             icon={DollarSign}
             color="#10B981"
             colorClass="text-emerald-400"
@@ -267,6 +377,46 @@ export default function ContratosPage() {
                   placeholder="Nome completo"
                   className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
                 />
+              </div>
+              <div>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Telefone</label>
+                <input
+                  value={form.telefone}
+                  onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))}
+                  placeholder="(00) 00000-0000"
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">CPF</label>
+                <input
+                  value={form.cpf}
+                  onChange={e => setForm(f => ({ ...f, cpf: e.target.value }))}
+                  placeholder="000.000.000-00"
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Assistente</label>
+                <select
+                  value={form.assistente}
+                  onChange={e => setForm(f => ({ ...f, assistente: e.target.value }))}
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                >
+                  <option value="">— Nenhum —</option>
+                  {consultores.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Analista</label>
+                <select
+                  value={form.analista}
+                  onChange={e => setForm(f => ({ ...f, analista: e.target.value }))}
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                >
+                  <option value="">— Nenhum —</option>
+                  {consultores.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                </select>
               </div>
               <div>
                 <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider block mb-1.5">Tipo de serviço *</label>
@@ -397,9 +547,107 @@ export default function ContratosPage() {
           </div>
         )}
 
+        {/* ── RESUMO POR PESSOA ── */}
+        {resumoPessoas.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-800">
+              <h3 className="text-white font-semibold text-sm">Produção por Pessoa</h3>
+              <p className="text-zinc-500 text-xs mt-0.5">Taxa proporcional — 50% cada quando há assistente + analista</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                    <th className="text-left px-5 py-3 font-medium">Pessoa</th>
+                    <th className="text-right px-4 py-3 font-medium">Contratos</th>
+                    <th className="text-right px-5 py-3 font-medium">Taxa proporcional</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {resumoPessoas.map(p => (
+                    <tr
+                      key={p.nome}
+                      onClick={() => setFiltroPessoa(filtroPessoa === p.nome ? 'todos' : p.nome)}
+                      className={`cursor-pointer transition-colors ${filtroPessoa === p.nome ? 'bg-emerald-500/10' : 'hover:bg-zinc-800/40'}`}
+                    >
+                      <td className="px-5 py-3">
+                        <span className={`font-medium ${filtroPessoa === p.nome ? 'text-emerald-400' : 'text-white'}`}>{p.nome}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-zinc-400">{p.qtd}</td>
+                      <td className="px-5 py-3 text-right text-emerald-400 font-semibold">{formatCurrency(p.taxa)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── COMISSÕES ── */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h3 className="text-white font-semibold text-sm">Comissão por Pessoa</h3>
+              <p className="text-zinc-500 text-xs mt-0.5">Contratos finalizados no mês · meta puxada da aba Consultores</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-500 text-xs">Mês:</span>
+              <input
+                type="month"
+                value={mesComissao}
+                onChange={e => setMesComissao(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700 text-white text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
+          </div>
+          {resumoComissoes.length === 0 ? (
+            <p className="text-zinc-600 text-xs text-center py-8">Nenhum contrato finalizado no mês com assistente ou analista atribuído.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                    <th className="text-left px-5 py-3 font-medium">Pessoa</th>
+                    <th className="text-right px-4 py-3 font-medium">Taxa proporcional</th>
+                    <th className="text-right px-4 py-3 font-medium">Meta</th>
+                    <th className="text-right px-4 py-3 font-medium">% Meta</th>
+                    <th className="text-right px-4 py-3 font-medium">% Comissão</th>
+                    <th className="text-right px-5 py-3 font-medium">Comissão (R$)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {resumoComissoes.map(p => {
+                    const cor = p.percComissao === 0 ? 'text-red-400' : p.percComissao >= 4 ? 'text-emerald-400' : 'text-amber-400'
+                    return (
+                      <tr key={p.nome} className="hover:bg-zinc-800/40 transition-colors">
+                        <td className="px-5 py-3 text-white font-medium">{p.nome}</td>
+                        <td className="px-4 py-3 text-right text-zinc-300">{formatCurrency(p.taxa)}</td>
+                        <td className="px-4 py-3 text-right text-zinc-500">
+                          {p.meta > 0 ? formatCurrency(p.meta) : <span className="text-red-400/70">sem meta</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-semibold ${p.meta > 0 ? (p.pct >= 100 ? 'text-emerald-400' : p.pct >= 70 ? 'text-amber-400' : 'text-red-400') : 'text-zinc-600'}`}>
+                            {p.meta > 0 ? `${p.pct.toFixed(0)}%` : '—'}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-3 text-right font-semibold ${cor}`}>
+                          {p.percComissao > 0 ? `${p.percComissao}%` : 'Sem comissão'}
+                        </td>
+                        <td className={`px-5 py-3 text-right font-bold ${p.comissao > 0 ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                          {p.comissao > 0 ? formatCurrency(p.comissao) : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         {/* ── FILTROS ── */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-zinc-500 text-xs font-medium uppercase tracking-wider mr-1">Filtrar:</span>
+          <span className="text-zinc-500 text-xs font-medium uppercase tracking-wider mr-1">Serviço:</span>
           {(['todos', ...SERVICOS] as string[]).map(s => (
             <button
               key={s}
@@ -413,6 +661,14 @@ export default function ContratosPage() {
               {s === 'todos' ? 'Todos' : s}
             </button>
           ))}
+          {filtroPessoa !== 'todos' && (
+            <button
+              onClick={() => setFiltroPessoa('todos')}
+              className="text-xs font-medium px-3 py-1.5 rounded-full border bg-emerald-500/15 text-emerald-400 border-emerald-500/40 flex items-center gap-1"
+            >
+              {filtroPessoa} <X className="w-3 h-3" />
+            </button>
+          )}
         </div>
 
         {/* ── TABELA ── */}
@@ -463,6 +719,19 @@ export default function ContratosPage() {
                         <div>
                           <span className="text-white font-medium text-sm">{c.nome}</span>
                           {c.origem && <span className="ml-2 text-zinc-600 text-xs">{c.origem}</span>}
+                          {(c.telefone || c.cpf) && (
+                            <p className="text-zinc-500 text-xs mt-0.5">
+                              {c.telefone && <span>{c.telefone}</span>}
+                              {c.telefone && c.cpf && <span className="mx-1">·</span>}
+                              {c.cpf && <span>{c.cpf}</span>}
+                            </p>
+                          )}
+                          {(c.assistente || c.analista) && (
+                            <p className="text-zinc-500 text-xs mt-0.5 flex items-center gap-1 flex-wrap">
+                              {c.assistente && <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded text-[10px]">Assist: {c.assistente}</span>}
+                              {c.analista && <span className="bg-violet-500/10 text-violet-400 border border-violet-500/20 px-1.5 py-0.5 rounded text-[10px]">Analista: {c.analista}</span>}
+                            </p>
+                          )}
                           {c.observacoes && (
                             <p className="text-amber-400 text-xs mt-0.5 max-w-[200px] truncate font-medium" title={c.observacoes}>{c.observacoes}</p>
                           )}

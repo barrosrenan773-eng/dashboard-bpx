@@ -6,7 +6,7 @@ import { formatCurrency } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Pencil, Trash2, Plus, Check, X,
-  Wallet, Briefcase, Lock, TrendingDown, ArrowRight,
+  Wallet, Briefcase, Lock, TrendingDown, ArrowRight, Calendar,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -501,10 +501,111 @@ function CapitalForaSection({ items, onReload }: { items: CapitalFora[]; onReloa
   )
 }
 
+// ─── DespesasPorCategoria ─────────────────────────────────────────────────────
+
+const EXCLUIR_CATS = ['compra_divida', 'pl', 'devolucao_emprestimo', 'bonificacao']
+const BAR_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#6366f1','#a855f7','#ec4899','#14b8a6','#f59e0b','#84cc16','#3b82f6']
+
+function catLabel(cat: string): string {
+  const LABELS: Record<string, string> = {
+    fixa: 'Despesas Fixas', variavel: 'Despesas Variáveis', pix: 'PIX / Transferências',
+    pessoal: 'Pessoal', dept_pessoal: 'Depto. Pessoal', beneficios: 'Benefícios',
+    comissao_corretor: 'Comissão Corretor', comissao_gerente: 'Comissão Gerente',
+    marketing: 'Marketing', servico_terceirizado: 'Serviço Terceirizado',
+    impostos: 'Impostos', taxas_bancarias: 'Taxas Bancárias',
+    despesas_diversas: 'Despesas Diversas', 'sem categoria': 'Sem Categoria',
+  }
+  return LABELS[cat] ?? cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+function DespesasPorCategoria({ despesas }: { despesas: Despesa[] }) {
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
+
+  const operacionais = despesas.filter(d => !EXCLUIR_CATS.includes(d.categoria))
+  const grupos: Record<string, { total: number; items: Despesa[] }> = {}
+  for (const d of operacionais) {
+    const cat = d.categoria || 'sem categoria'
+    if (!grupos[cat]) grupos[cat] = { total: 0, items: [] }
+    grupos[cat].total += Number(d.valor) || 0
+    grupos[cat].items.push(d)
+  }
+  const total = Object.values(grupos).reduce((s, g) => s + g.total, 0)
+  const entries = Object.entries(grupos).sort((a, b) => b[1].total - a[1].total)
+
+  function toggle(cat: string) {
+    setExpandedCats(prev => { const n = new Set(prev); n.has(cat) ? n.delete(cat) : n.add(cat); return n })
+  }
+
+  if (entries.length === 0) {
+    return <div className="p-8 text-center text-zinc-600 text-sm">Nenhuma despesa no período</div>
+  }
+
+  return (
+    <div className="px-5 py-4 space-y-1">
+      {/* Barra empilhada */}
+      {total > 0 && (
+        <div className="flex h-3 rounded-full overflow-hidden mb-5">
+          {entries.map(([cat, { total: v }], i) => (
+            <div key={cat} style={{ width: `${(v / total) * 100}%`, background: BAR_COLORS[i % BAR_COLORS.length] }} />
+          ))}
+        </div>
+      )}
+
+      {/* Categorias */}
+      {entries.map(([cat, { total: catTotal, items }], idx) => {
+        const isOpen = expandedCats.has(cat)
+        const pct = total > 0 ? (catTotal / total) * 100 : 0
+        const color = BAR_COLORS[idx % BAR_COLORS.length]
+        return (
+          <div key={cat}>
+            <button
+              onClick={() => toggle(cat)}
+              className="w-full flex items-center gap-3 py-2 hover:bg-zinc-800/40 rounded-lg px-2 transition-colors"
+            >
+              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+              <span className="text-zinc-300 text-sm flex-1 text-left">{catLabel(cat)}</span>
+              {items.length > 0 && <span className="text-zinc-600 text-xs">{items.length}</span>}
+              <div className="w-24 mx-2 bg-zinc-800 rounded-full h-1.5">
+                <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: color, opacity: 0.7 }} />
+              </div>
+              <span className="text-zinc-500 text-xs w-10 text-right">{pct.toFixed(0)}%</span>
+              <span className="text-zinc-300 text-sm font-medium w-28 text-right">{fmt(catTotal)}</span>
+              {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-zinc-600" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-600" />}
+            </button>
+            {isOpen && (
+              <div className="ml-8 space-y-0.5 mt-1 mb-2">
+                {items.map(d => (
+                  <div key={d.id} className="flex items-center justify-between py-1">
+                    <span className="text-zinc-500 text-xs flex-1">
+                      {d.created_at?.slice(8, 10) && <span className="text-zinc-600 mr-1">{d.created_at.slice(8, 10)}/{d.created_at.slice(5, 7)}</span>}
+                      {d.descricao}
+                    </span>
+                    <span className="text-zinc-400 text-xs font-medium">{fmt(Number(d.valor))}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {/* Total */}
+      <div className="flex items-center justify-between pt-3 mt-2 border-t border-zinc-800">
+        <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Total</span>
+        <span className="text-red-400 font-bold text-sm">{fmt(total)}</span>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CaixaPage() {
   const [mes, setMes] = useState(getCurrentMes)
+
+  // Period filter for despesas
+  const [periodoInicio, setPeriodoInicio] = useState(() => mes + '-01')
+  const [periodoFim, setPeriodoFim] = useState(todayISO)
 
   // Data sources
   const [caixaRows, setCaixaRows] = useState<CaixaRow[]>([])
@@ -535,7 +636,11 @@ export default function CaixaPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadAll() }, [mes]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadAll()
+    setPeriodoInicio(mes + '-01')
+    setPeriodoFim(todayISO())
+  }, [mes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Computed values ──────────────────────────────────────────────────────────
 
@@ -553,11 +658,10 @@ export default function CaixaPage() {
   // Capital fora do caixa (judicializado / em operação externa)
   const totalCapitalFora = capitalFora.reduce((s, c) => s + (c.valor ?? 0), 0)
 
-  // Despesas do período: mês atual, created_at até hoje
-  const hoje = todayISO()
+  // Despesas do período
   const despesasPeriodo = despesas.filter(d => {
     const dt = d.created_at?.slice(0, 10) ?? ''
-    return dt >= mes + '-01' && dt <= hoje
+    return dt >= periodoInicio && dt <= periodoFim
   })
   const totalDespesasPeriodo = despesasPeriodo.reduce((s, d) => s + (d.valor ?? 0), 0)
 
@@ -632,7 +736,7 @@ export default function CaixaPage() {
           <KpiCard
             label="Despesas do Período"
             value={fmt(totalDespesasPeriodo)}
-            sub={`${despesasPeriodo.length} lançamento${despesasPeriodo.length !== 1 ? 's' : ''} até hoje`}
+            sub={`${despesasPeriodo.length} lançamento${despesasPeriodo.length !== 1 ? 's' : ''} até ${periodoFim}`}
             icon={TrendingDown}
             color="#F59E0B"
             colorClass="text-amber-400"
@@ -791,44 +895,37 @@ export default function CaixaPage() {
         </SectionBlock>
 
         <SectionBlock
-          title="Despesas do Período"
-          subtitle={`Lançamentos de ${mes}-01 até hoje (${hoje})`}
+          title="Despesas por Categoria"
+          subtitle={`${periodoInicio} até ${periodoFim}`}
           badge={`${despesasPeriodo.length} · ${fmt(totalDespesasPeriodo)}`}
           expanded={expDespesas}
           onToggle={() => setExpDespesas(v => !v)}
         >
-          {despesasPeriodo.length === 0 ? (
-            <div className="p-8 text-center text-zinc-600 text-sm">Nenhuma despesa no período</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-800">
-                    {['Categoria', 'Descrição', 'Valor', 'Data'].map(h => (
-                      <th key={h} className="text-left text-xs text-zinc-500 font-medium uppercase tracking-wider py-3 px-5">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800/60">
-                  {despesasPeriodo.map(d => (
-                    <tr key={d.id} className="hover:bg-zinc-800/30 transition-colors">
-                      <td className="py-3.5 px-5 text-zinc-300 text-sm capitalize">{d.categoria || '—'}</td>
-                      <td className="py-3.5 px-5 text-zinc-400 text-sm truncate max-w-[220px]">{d.descricao}</td>
-                      <td className="py-3.5 px-5 text-red-400 font-semibold text-sm">{fmt(d.valor)}</td>
-                      <td className="py-3.5 px-5 text-zinc-500 text-xs">{d.created_at?.slice(0, 10) || d.mes}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-zinc-700">
-                    <td colSpan={2} className="px-5 py-3 text-zinc-500 text-xs font-medium">Total</td>
-                    <td className="px-5 py-3 text-red-400 font-bold text-sm">{fmt(totalDespesasPeriodo)}</td>
-                    <td />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
+          {/* Period filter */}
+          <div className="px-5 py-3 border-b border-zinc-800/50 flex flex-wrap items-center gap-2">
+            <Calendar className="w-4 h-4 text-zinc-500 shrink-0" />
+            <span className="text-zinc-500 text-xs">Período:</span>
+            <input
+              type="date"
+              value={periodoInicio}
+              onChange={e => setPeriodoInicio(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 [color-scheme:dark]"
+            />
+            <span className="text-zinc-600 text-xs">até</span>
+            <input
+              type="date"
+              value={periodoFim}
+              onChange={e => setPeriodoFim(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 [color-scheme:dark]"
+            />
+            <button
+              onClick={() => { setPeriodoInicio(mes + '-01'); setPeriodoFim(todayISO()) }}
+              className="text-zinc-500 hover:text-zinc-300 text-xs px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 hover:border-zinc-500 transition-colors"
+            >
+              Mês atual
+            </button>
+          </div>
+          <DespesasPorCategoria despesas={despesasPeriodo} />
         </SectionBlock>
 
         <SectionBlock

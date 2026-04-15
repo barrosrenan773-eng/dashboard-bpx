@@ -145,17 +145,48 @@ function KpiCardTV({ label, value, sub, badge, icon: Icon, color, colorClass, bg
 
 // ─── ProgressBar ─────────────────────────────────────────────────────────────
 
-function ProgressBar({ value, target, expectedPct, colorClass }: {
+function ProgressBar({ value, target, expectedPct, colorClass, showExpectedLabel, formatValue }: {
   value: number; target: number; expectedPct: number; colorClass: string
+  showExpectedLabel?: boolean; formatValue?: (n: number) => string
 }) {
   const pct = target > 0 ? Math.min((value / target) * 100, 100) : 0
   const ahead = pct >= expectedPct
+  const expectedValue = target * expectedPct / 100
+  const diff = value - expectedValue
+  const dotLeft = Math.min(expectedPct, 97)
+
   return (
-    <div className="relative w-full bg-zinc-800/80 rounded-full h-1.5 overflow-visible my-1">
-      <div className={`h-1.5 rounded-full transition-all duration-500 ${colorClass}`} style={{ width: `${pct}%` }} />
-      {target > 0 && expectedPct > 0 && expectedPct < 100 && (
-        <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2" style={{ left: `${Math.min(expectedPct, 98)}%` }}>
-          <div className={`w-2.5 h-2.5 rounded-full border-2 ${ahead ? 'border-emerald-400 bg-zinc-900' : 'border-zinc-400 bg-zinc-900'}`} />
+    <div className="relative w-full mt-3 mb-1">
+      {/* Label flutuante acima do pontinho */}
+      {target > 0 && expectedPct > 0 && expectedPct < 100 && showExpectedLabel && (
+        <div
+          className="absolute -top-5 -translate-x-1/2 flex flex-col items-center pointer-events-none"
+          style={{ left: `${dotLeft}%` }}
+        >
+          <span className={`text-[10px] font-semibold whitespace-nowrap ${ahead ? 'text-emerald-400' : 'text-zinc-500'}`}>
+            {formatValue ? formatValue(expectedValue) : expectedValue.toFixed(0)}
+          </span>
+        </div>
+      )}
+
+      {/* Barra */}
+      <div className="relative w-full bg-zinc-800/80 rounded-full h-1.5 overflow-visible">
+        <div className={`h-1.5 rounded-full transition-all duration-500 ${colorClass}`} style={{ width: `${pct}%` }} />
+
+        {/* Pontinho de onde deveria estar */}
+        {target > 0 && expectedPct > 0 && expectedPct < 100 && (
+          <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2" style={{ left: `${dotLeft}%` }}>
+            <div className={`w-3 h-3 rounded-full border-2 shadow ${ahead ? 'border-emerald-400 bg-zinc-900' : 'border-zinc-400 bg-zinc-900'}`} />
+          </div>
+        )}
+      </div>
+
+      {/* Gap: falta / adiantado */}
+      {target > 0 && expectedPct > 0 && expectedPct < 100 && showExpectedLabel && formatValue && (
+        <div className="flex justify-end mt-0.5">
+          <span className={`text-[10px] font-semibold ${ahead ? 'text-emerald-400' : 'text-red-400'}`}>
+            {ahead ? `+${formatValue(diff)} adiantado` : `${formatValue(Math.abs(diff))} faltando`}
+          </span>
         </div>
       )}
     </div>
@@ -223,15 +254,101 @@ function ProgressMetric({
           )}
         </div>
       </div>
-      <ProgressBar value={value} target={target} expectedPct={expectedPct} colorClass={colorBar} />
-      <div className="flex items-center justify-between mt-0.5">
+      <ProgressBar value={value} target={target} expectedPct={expectedPct} colorClass={colorBar} showExpectedLabel formatValue={formatValue} />
+      <div className="flex items-center justify-between">
         <span className="text-xs">{bottomLeft ?? <span className="text-zinc-500">{formatValue(value) + (target > 0 ? ` / ${formatValue(target)}` : '')}</span>}</span>
-        {rightBottom && target > 0 && (
-          <span className={`text-[11px] font-semibold ${pctRitmo >= 100 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {rightBottom}
-          </span>
-        )}
       </div>
+    </div>
+  )
+}
+
+// ─── Insights ────────────────────────────────────────────────────────────────
+
+type Insight = { tipo: 'positivo' | 'alerta' | 'atencao'; texto: string }
+
+function gerarInsights(
+  v: Consultor,
+  meta: number,
+  meta_leads: number,
+  meta_conversao: number,
+  meta_ticket: number,
+  expectedPct: number,
+): Insight[] {
+  const insights: Insight[] = []
+  const pctMeta   = meta > 0 ? (v.receita / meta) * 100 : null
+  const pctLeads  = meta_leads > 0 ? (v.leads / meta_leads) * 100 : null
+  const ticket    = v.deals > 0 ? v.receita / v.deals : 0
+
+  // Ritmo de receita
+  if (pctMeta !== null && expectedPct > 20) {
+    if (pctMeta < expectedPct * 0.6) {
+      insights.push({ tipo: 'alerta', texto: 'Ritmo muito abaixo — risco alto de não bater a meta no mês' })
+    } else if (pctMeta >= expectedPct * 0.9 && pctMeta < 100) {
+      insights.push({ tipo: 'atencao', texto: 'No ritmo, mas sem folga — manter pressão até o fim do mês' })
+    } else if (pctMeta >= 100) {
+      insights.push({ tipo: 'positivo', texto: 'Meta batida! 🎉 Cada novo contrato é bônus' })
+    } else if (pctMeta >= expectedPct) {
+      insights.push({ tipo: 'positivo', texto: 'No ritmo certo — continuar assim para fechar bem' })
+    }
+  }
+
+  // Prospecção / leads
+  if (pctLeads !== null && expectedPct > 20) {
+    if (pctLeads < 60) {
+      insights.push({ tipo: 'alerta', texto: 'Prospecção abaixo do ritmo — aumentar captação diária de leads' })
+    } else if (pctLeads >= 100) {
+      insights.push({ tipo: 'positivo', texto: 'Meta de prospecção batida — volume de leads saudável' })
+    }
+  }
+
+  // Taxa de conversão vs meta e prospecção
+  if (meta_conversao > 0 && v.leads >= 5) {
+    if (v.taxaConversao < meta_conversao * 0.7) {
+      if (pctLeads !== null && pctLeads >= 85) {
+        insights.push({ tipo: 'alerta', texto: 'Prospecta bem, mas conversão baixa — revisar abordagem e discurso' })
+      } else {
+        insights.push({ tipo: 'alerta', texto: 'Conversão abaixo da meta — avaliar qualidade dos leads recebidos' })
+      }
+    } else if (v.taxaConversao >= meta_conversao) {
+      insights.push({ tipo: 'positivo', texto: `Boa conversão (${v.taxaConversao.toFixed(1)}%) — fechamento eficiente` })
+    }
+  } else if (meta_conversao === 0 && v.leads >= 5 && v.taxaConversao < 15) {
+    insights.push({ tipo: 'atencao', texto: 'Conversão abaixo de 15% — vale analisar a qualidade dos leads' })
+  }
+
+  // Ticket médio
+  if (meta_ticket > 0 && ticket > 0 && ticket < meta_ticket * 0.8) {
+    insights.push({ tipo: 'atencao', texto: 'Ticket médio abaixo da meta — focar em contratos de maior valor' })
+  }
+
+  // Pipeline travado
+  if (v.dealsAbertos > 0 && v.dealsAbertos >= v.deals * 3 && v.dealsAbertos >= 5) {
+    insights.push({ tipo: 'atencao', texto: `${v.dealsAbertos} leads em aberto — pipeline pode estar travado` })
+  }
+
+  // Sem dados suficientes
+  if (v.leads === 0) {
+    insights.push({ tipo: 'atencao', texto: 'Nenhum lead registrado no período selecionado' })
+  }
+
+  return insights.slice(0, 3)
+}
+
+function InsightChip({ insight }: { insight: Insight }) {
+  const styles: Record<Insight['tipo'], string> = {
+    positivo: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    alerta:   'bg-red-500/10 text-red-400 border-red-500/20',
+    atencao:  'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+  }
+  const icons: Record<Insight['tipo'], string> = {
+    positivo: '✓',
+    alerta:   '!',
+    atencao:  '~',
+  }
+  return (
+    <div className={`flex items-start gap-1.5 rounded-lg border px-2.5 py-1.5 ${styles[insight.tipo]}`}>
+      <span className="font-bold text-[10px] leading-tight mt-px flex-shrink-0">{icons[insight.tipo]}</span>
+      <span className="text-[11px] leading-tight">{insight.texto}</span>
     </div>
   )
 }
@@ -326,12 +443,6 @@ function ConsultantCard({
                 <span className={pctMeta >= 100 ? 'text-emerald-400' : pctMeta >= expectedPct ? 'text-yellow-400' : 'text-zinc-300'}>
                   {formatCurrency(v.receita)}
                 </span>
-                {expectedPct > 0 && (
-                  <>
-                    <span className="text-zinc-700">·</span>
-                    <span className="text-zinc-500">esp {formatCurrency(meta * expectedPct / 100)}</span>
-                  </>
-                )}
                 <span className="text-zinc-700">·</span>
                 <span className="text-zinc-600">meta {formatCurrency(meta)}</span>
               </span>
@@ -597,33 +708,84 @@ function ConsultoresInner() {
     ? consultores.filter(c => c.tempMedioFechamento > 0).reduce((s, c) => s + c.tempMedioFechamento, 0) /
       Math.max(1, consultores.filter(c => c.tempMedioFechamento > 0).length) : 0
 
+  // Metas fixas da equipe
+  const META_CONVERSAO    = 5      // %
+  const META_LEADS_MES    = 2000
+  const META_LEADS_DIA    = 100
+
+  const pctConversao      = taxaConversao / META_CONVERSAO * 100
+  const diffConversao     = taxaConversao - META_CONVERSAO
+  const barConversaoColor = taxaConversao >= META_CONVERSAO ? 'bg-emerald-500' : taxaConversao >= META_CONVERSAO * 0.8 ? 'bg-yellow-500' : 'bg-red-500/70'
+  const colorConversao    = taxaConversao >= META_CONVERSAO ? '#10B981' : taxaConversao >= META_CONVERSAO * 0.8 ? '#EAB308' : '#EF4444'
+
+  const pctLeadsMes       = (totalLeads / META_LEADS_MES) * 100
+  const leadsEsperados    = META_LEADS_MES * (expectedPctGeral / 100)
+  const diffLeads         = totalLeads - leadsEsperados
+  const barLeadsColor     = totalLeads >= leadsEsperados ? 'bg-violet-500' : totalLeads >= leadsEsperados * 0.8 ? 'bg-yellow-500' : 'bg-red-500/70'
+  const colorLeads        = totalLeads >= leadsEsperados ? '#8B5CF6' : totalLeads >= leadsEsperados * 0.8 ? '#EAB308' : '#EF4444'
+
+  const pctLeadsDia       = Math.min((leadsHoje / META_LEADS_DIA) * 100, 100)
+  const barLeadsDiaColor  = leadsHoje >= META_LEADS_DIA ? 'bg-violet-500' : leadsHoje >= META_LEADS_DIA * 0.8 ? 'bg-yellow-500' : 'bg-red-500/70'
+  const colorLeadsDia     = leadsHoje >= META_LEADS_DIA ? '#8B5CF6' : leadsHoje >= META_LEADS_DIA * 0.8 ? '#EAB308' : '#EF4444'
+
   const kpiCards = [
     { label: L.receitaTotal, value: loading ? '...' : formatCurrency(totalReceita),
-      sub: undefined,
-      badge: undefined,
+      sub: undefined, badge: undefined,
       icon: DollarSign, color: '#10B981', colorClass: 'text-emerald-400', bgClass: 'bg-emerald-500/10' },
     ...(metaTotal > 0 ? [{
       label: 'Meta de Receita',
       value: loading ? '...' : formatCurrency(metaTotal),
-      sub: undefined,
+      sub: loading ? undefined : (() => {
+        const diff = totalReceita - expectedReceita
+        if (expectedReceita <= 0) return `${pctMetaGeral.toFixed(1)}% atingido`
+        return diff >= 0
+          ? `+${formatCurrency(diff)} acima do ritmo esperado`
+          : `${formatCurrency(Math.abs(diff))} abaixo do ritmo esperado`
+      })(),
       badge: undefined,
       icon: TrendingUp, color: pctMetaGeral >= expectedPctGeral ? '#10B981' : pctMetaGeral >= expectedPctGeral * 0.8 ? '#EAB308' : '#EF4444',
       colorClass: pctMetaGeral >= expectedPctGeral ? 'text-emerald-400' : pctMetaGeral >= expectedPctGeral * 0.8 ? 'text-yellow-400' : 'text-red-400',
       bgClass: pctMetaGeral >= expectedPctGeral ? 'bg-emerald-500/10' : pctMetaGeral >= expectedPctGeral * 0.8 ? 'bg-yellow-500/10' : 'bg-red-500/10',
       progress: { pct: pctMetaGeral, colorClass: barMetaColor },
     }] : []),
-    { label: L.leads, value: loading ? '...' : formatNumber(totalLeads),
-      sub: undefined, badge: undefined,
-      icon: Users, color: '#8B5CF6', colorClass: 'text-violet-400', bgClass: 'bg-violet-500/10' },
-    { label: L.conversao, value: loading ? '...' : `${taxaConversao.toFixed(1)}%`,
-      sub: undefined, badge: undefined,
-      icon: Target, color: '#06B6D4', colorClass: 'text-cyan-400', bgClass: 'bg-cyan-500/10' },
+    { label: 'Leads do Mês',
+      value: loading ? '...' : formatNumber(totalLeads),
+      sub: loading ? undefined : (() => {
+        if (diffLeads >= 0) return `+${Math.round(diffLeads)} acima do ritmo esperado`
+        return `${Math.round(Math.abs(diffLeads))} abaixo do ritmo esperado`
+      })(),
+      badge: undefined,
+      icon: Users, color: colorLeads,
+      colorClass: totalLeads >= leadsEsperados ? 'text-violet-400' : totalLeads >= leadsEsperados * 0.8 ? 'text-yellow-400' : 'text-red-400',
+      bgClass: totalLeads >= leadsEsperados ? 'bg-violet-500/10' : totalLeads >= leadsEsperados * 0.8 ? 'bg-yellow-500/10' : 'bg-red-500/10',
+      progress: { pct: pctLeadsMes, colorClass: barLeadsColor },
+    },
+    { label: 'Taxa de Conversão',
+      value: loading ? '...' : `${taxaConversao.toFixed(1)}%`,
+      sub: loading ? undefined : (() => {
+        if (diffConversao >= 0) return `+${diffConversao.toFixed(1)}pp acima da meta de ${META_CONVERSAO}%`
+        return `${Math.abs(diffConversao).toFixed(1)}pp abaixo da meta de ${META_CONVERSAO}%`
+      })(),
+      badge: undefined,
+      icon: Target, color: colorConversao,
+      colorClass: taxaConversao >= META_CONVERSAO ? 'text-cyan-400' : taxaConversao >= META_CONVERSAO * 0.8 ? 'text-yellow-400' : 'text-red-400',
+      bgClass: taxaConversao >= META_CONVERSAO ? 'bg-cyan-500/10' : taxaConversao >= META_CONVERSAO * 0.8 ? 'bg-yellow-500/10' : 'bg-red-500/10',
+      progress: { pct: Math.min(pctConversao, 100), colorClass: barConversaoColor },
+    },
     { label: L.trafego, value: loadingTrafego ? '...' : formatCurrency(totalSpend),
       sub: undefined, badge: undefined,
       icon: TrendingUp, color: '#F97316', colorClass: 'text-orange-400', bgClass: 'bg-orange-500/10' },
-    { label: L.leadsDia, value: loading ? '...' : String(leadsHoje),
-      sub: undefined, badge: undefined,
-      icon: CalendarCheck, color: '#8B5CF6', colorClass: 'text-violet-400', bgClass: 'bg-violet-500/10' },
+    { label: 'Leads Hoje',
+      value: loading ? '...' : String(leadsHoje),
+      sub: loading ? undefined : leadsHoje >= META_LEADS_DIA
+        ? `Meta de ${META_LEADS_DIA} batida! ✓`
+        : `${META_LEADS_DIA - leadsHoje} faltando para ${META_LEADS_DIA}`,
+      badge: undefined,
+      icon: CalendarCheck, color: colorLeadsDia,
+      colorClass: leadsHoje >= META_LEADS_DIA ? 'text-violet-400' : leadsHoje >= META_LEADS_DIA * 0.8 ? 'text-yellow-400' : 'text-red-400',
+      bgClass: leadsHoje >= META_LEADS_DIA ? 'bg-violet-500/10' : leadsHoje >= META_LEADS_DIA * 0.8 ? 'bg-yellow-500/10' : 'bg-red-500/10',
+      progress: { pct: pctLeadsDia, colorClass: barLeadsDiaColor },
+    },
   ]
 
   // ── Modo TV ───────────────────────────────────────────────────────────────

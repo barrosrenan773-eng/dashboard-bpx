@@ -66,6 +66,10 @@ export interface Contrato {
   responsavel?: string
   servico?: string
   origem?: string
+  telefone?: string | null
+  cpf?: string | null
+  assistente?: string | null
+  analista?: string | null
 }
 
 export interface Despesa {
@@ -164,7 +168,8 @@ export function filtrarContratos(
   status = 'todos'
 ): Contrato[] {
   return contratos.filter(c => {
-    const dt = new Date(c.created_at)
+    const ref = (c as any).data_finalizacao || c.created_at
+    const dt = new Date(ref)
     const inPeriod = dt >= dateStart && dt <= dateEnd
     const inStatus = status === 'todos' || c.status === status
     return inPeriod && inStatus
@@ -175,7 +180,7 @@ export function filtrarContratos(
 export function filtrarDespesas(despesas: Despesa[], dateStart: Date, dateEnd: Date): Despesa[] {
   return despesas.filter(d => {
     // Exclui categorias que não são despesas operacionais
-    if (d.categoria === 'compra_divida' || d.categoria === 'pl') return false
+    if (['compra_divida', 'pl', 'devolucao_emprestimo', 'bonificacao'].includes(d.categoria)) return false
     // Filtra pelo mês de competência (campo mes) em vez de created_at
     if (d.mes) {
       const [y, m] = d.mes.split('-').map(Number)

@@ -373,7 +373,8 @@ export default function RelatoriosPage() {
 
   // Apenas finalizados do período → alimentam KPIs de receita, capital, produção, lucro
   const contratosFinalizados = useMemo(() => contratos.filter(c => {
-    const dt = new Date(c.created_at)
+    const ref = (c as any).data_finalizacao || c.created_at
+    const dt = new Date(ref)
     return dt >= dateStart && dt <= dateEnd && c.status === 'finalizado'
   }), [contratos, dateStart, dateEnd])
 
@@ -384,7 +385,7 @@ export default function RelatoriosPage() {
   }), [contratos, dateStart, dateEnd])
 
   const despesasFiltradas = useMemo(() => despesas.filter(d => {
-    if (d.categoria === 'compra_divida' || d.categoria === 'pl') return false
+    if (['compra_divida', 'pl', 'devolucao_emprestimo', 'bonificacao'].includes(d.categoria)) return false
     if (d.mes) {
       const [y, m] = d.mes.split('-').map(Number)
       const dt = new Date(y, m - 1, 1)
@@ -419,8 +420,8 @@ export default function RelatoriosPage() {
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
     }
     return months.map(m => {
-      const mc = contratos.filter(c => getMonthKey(c.created_at) === m && c.status === 'finalizado')
-      const md = despesas.filter(d => (d.mes === m || getMonthKey(d.created_at) === m) && d.categoria !== 'compra_divida' && d.categoria !== 'pl')
+      const mc = contratos.filter(c => getMonthKey((c as any).data_finalizacao || c.created_at) === m && c.status === 'finalizado')
+      const md = despesas.filter(d => (d.mes === m || getMonthKey(d.created_at) === m) && !['compra_divida', 'pl', 'devolucao_emprestimo', 'bonificacao'].includes(d.categoria))
       const cap  = mc.reduce((s, c) => s + (c.capital ?? 0), 0)
       const taxa = mc.reduce((s, c) => s + (c.taxa ?? 0), 0)
       const desp = md.reduce((s, d) => s + (d.valor ?? 0), 0)
@@ -452,7 +453,7 @@ export default function RelatoriosPage() {
 
   // ── Contratos finalizados do mês selecionado ──
   const contratosMes = useMemo(() =>
-    contratos.filter(c => c.created_at && c.created_at.startsWith(mesSelecionado) && c.status === 'finalizado')
+    contratos.filter(c => c.status === 'finalizado' && ((c as any).data_finalizacao || c.created_at)?.startsWith(mesSelecionado))
   , [contratos, mesSelecionado])
 
   const capitalMes = contratosMes.reduce((s, c) => s + (c.capital ?? 0), 0)
