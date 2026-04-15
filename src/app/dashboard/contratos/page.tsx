@@ -299,8 +299,6 @@ export default function ContratosPage() {
   const totalGeral = totalCapital + totalTaxas
   const totalFinalizados = contratos.filter(c => c.status === 'finalizado').length
   const emAndamento = contratos.filter(c => c.status !== 'finalizado').length
-  // Receita do mês selecionado (mesma lógica do financeiro)
-  const receitaDoMes = contratosDoMes.reduce((s, c) => s + c.taxa, 0)
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950">
@@ -329,9 +327,9 @@ export default function ContratosPage() {
             bgClass="bg-blue-500/10"
           />
           <KpiCard
-            label={L.receita}
-            value={formatCurrency(receitaDoMes)}
-            sub={`finalizados em ${mesComissao}`}
+            label={L.receitaTotal}
+            value={formatCurrency(totalTaxas)}
+            sub="total da carteira (todas as taxas)"
             icon={DollarSign}
             color="#10B981"
             colorClass="text-emerald-400"

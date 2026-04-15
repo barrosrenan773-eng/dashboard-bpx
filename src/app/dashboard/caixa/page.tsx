@@ -6,7 +6,7 @@ import { formatCurrency } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Pencil, Trash2, Plus, Check, X,
-  Wallet, Briefcase, Lock, TrendingDown, ArrowRight, Calendar,
+  Wallet, Briefcase, Lock, TrendingDown, ArrowRight,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -602,9 +602,6 @@ function DespesasPorCategoria({ despesas }: { despesas: Despesa[] }) {
 export default function CaixaPage() {
   const [mes, setMes] = useState(getCurrentMes)
 
-  // Period filter for despesas
-  const [periodoInicio, setPeriodoInicio] = useState(() => mes + '-01')
-  const [periodoFim, setPeriodoFim] = useState(todayISO)
 
   // Data sources
   const [caixaRows, setCaixaRows] = useState<CaixaRow[]>([])
@@ -635,11 +632,7 @@ export default function CaixaPage() {
     setLoading(false)
   }
 
-  useEffect(() => {
-    loadAll()
-    setPeriodoInicio(mes + '-01')
-    setPeriodoFim(todayISO())
-  }, [mes]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadAll() }, [mes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Computed values ──────────────────────────────────────────────────────────
 
@@ -657,12 +650,12 @@ export default function CaixaPage() {
   // Capital fora do caixa (judicializado / em operação externa)
   const totalCapitalFora = capitalFora.reduce((s, c) => s + (c.valor ?? 0), 0)
 
-  // Despesas do período — exclui categorias não operacionais
+  // Despesas do período — filtra por mes (competência), igual ao DRE do financeiro
   const EXCLUIR = ['compra_divida', 'pl', 'devolucao_emprestimo', 'bonificacao']
   const despesasPeriodo = despesas.filter(d => {
     if (EXCLUIR.includes(d.categoria)) return false
-    const dt = d.created_at?.slice(0, 10) ?? ''
-    return dt >= periodoInicio && dt <= periodoFim
+    // Usa o campo mes (competência) para não perder lançamentos com created_at em outro mês
+    return d.mes === mes
   })
   const totalDespesasPeriodo = despesasPeriodo.reduce((s, d) => s + (d.valor ?? 0), 0)
 
@@ -737,7 +730,7 @@ export default function CaixaPage() {
           <KpiCard
             label="Despesas do Período"
             value={fmt(totalDespesasPeriodo)}
-            sub={`${despesasPeriodo.length} lançamento${despesasPeriodo.length !== 1 ? 's' : ''} até ${periodoFim}`}
+            sub={`${despesasPeriodo.length} lançamento${despesasPeriodo.length !== 1 ? 's' : ''} em ${formatMesLabel(mes)}`}
             icon={TrendingDown}
             color="#F59E0B"
             colorClass="text-amber-400"
@@ -897,35 +890,11 @@ export default function CaixaPage() {
 
         <SectionBlock
           title="Despesas por Categoria"
-          subtitle={`${periodoInicio} até ${periodoFim}`}
+          subtitle={`Competência: ${formatMesLabel(mes)}`}
           badge={`${despesasPeriodo.length} · ${fmt(totalDespesasPeriodo)}`}
           expanded={expDespesas}
           onToggle={() => setExpDespesas(v => !v)}
         >
-          {/* Period filter */}
-          <div className="px-5 py-3 border-b border-zinc-800/50 flex flex-wrap items-center gap-2">
-            <Calendar className="w-4 h-4 text-zinc-500 shrink-0" />
-            <span className="text-zinc-500 text-xs">Período:</span>
-            <input
-              type="date"
-              value={periodoInicio}
-              onChange={e => setPeriodoInicio(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 [color-scheme:dark]"
-            />
-            <span className="text-zinc-600 text-xs">até</span>
-            <input
-              type="date"
-              value={periodoFim}
-              onChange={e => setPeriodoFim(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 [color-scheme:dark]"
-            />
-            <button
-              onClick={() => { setPeriodoInicio(mes + '-01'); setPeriodoFim(todayISO()) }}
-              className="text-zinc-500 hover:text-zinc-300 text-xs px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 hover:border-zinc-500 transition-colors"
-            >
-              Mês atual
-            </button>
-          </div>
           <DespesasPorCategoria despesas={despesasPeriodo} />
         </SectionBlock>
 
