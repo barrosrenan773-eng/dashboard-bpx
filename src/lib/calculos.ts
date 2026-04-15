@@ -161,6 +161,13 @@ export function calcularDistribuicaoLucro(lucro: number) {
 }
 
 /** Filtra contratos por período e status */
+/** Parseia string de data como horário local (evita offset UTC) */
+function parseDateLocal(ref: string): Date {
+  // Se for só data (YYYY-MM-DD), adiciona T00:00:00 para interpretar como horário local
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ref)) return new Date(ref + 'T00:00:00')
+  return new Date(ref)
+}
+
 export function filtrarContratos(
   contratos: Contrato[],
   dateStart: Date,
@@ -169,7 +176,7 @@ export function filtrarContratos(
 ): Contrato[] {
   return contratos.filter(c => {
     const ref = (c as any).data_finalizacao || c.created_at
-    const dt = new Date(ref)
+    const dt = parseDateLocal(ref)
     const inPeriod = dt >= dateStart && dt <= dateEnd
     const inStatus = status === 'todos' || c.status === status
     return inPeriod && inStatus
