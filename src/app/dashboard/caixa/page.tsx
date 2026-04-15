@@ -25,7 +25,7 @@ type Contrato = {
 
 type Despesa = {
   id: number; descricao: string; categoria: string; valor: number
-  mes: string; empresa: string; created_at: string
+  mes: string; empresa: string; data?: string; created_at: string
 }
 
 type StatusFora = 'em_operacao' | 'aguardando_liquidacao' | 'judicializado' | 'em_recuperacao'
@@ -577,7 +577,7 @@ function DespesasPorCategoria({ despesas, folha = 0, comissoes = 0 }: { despesas
                 {items.map(d => (
                   <div key={d.id} className="flex items-center justify-between py-1">
                     <span className="text-zinc-500 text-xs flex-1">
-                      {d.created_at?.slice(8, 10) && <span className="text-zinc-600 mr-1">{d.created_at.slice(8, 10)}/{d.created_at.slice(5, 7)}</span>}
+                      {(() => { const dt = (d.data || d.created_at || '').slice(0, 10); return dt ? <span className="text-zinc-600 mr-1">{dt.slice(8, 10)}/{dt.slice(5, 7)}</span> : null })()}
                       {d.descricao}
                     </span>
                     <span className="text-zinc-400 text-xs font-medium">{fmt(Number(d.valor))}</span>
@@ -716,9 +716,10 @@ export default function CaixaPage() {
   const despesasPeriodo = despesas.filter(d => {
     if (EXCLUIR.includes(d.categoria)) return false
     if (d.mes !== mes) return false
-    // Refinamento por período (se preenchido), usa created_at
-    if (filtroInicio && d.created_at?.slice(0, 10) < filtroInicio) return false
-    if (filtroFim && d.created_at?.slice(0, 10) > filtroFim) return false
+    // Refinamento por período — usa campo data se disponível, senão created_at
+    const dtRef = (d.data || d.created_at || '').slice(0, 10)
+    if (filtroInicio && dtRef < filtroInicio) return false
+    if (filtroFim && dtRef > filtroFim) return false
     return true
   })
   const totalDespesasDB = despesasPeriodo.reduce((s, d) => s + (d.valor ?? 0), 0)
