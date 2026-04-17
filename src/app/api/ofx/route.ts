@@ -11,6 +11,27 @@ export type OFXTransaction = {
   mes: string    // YYYY-MM
 }
 
+export type OFXSaldo = {
+  valor: number
+  data: string  // YYYY-MM-DD — data de referência do saldo
+}
+
+function parseOFXSaldo(content: string): OFXSaldo | null {
+  const getField = (text: string, name: string) => {
+    const m = new RegExp(`<${name}>([^<\n\r]+)`, 'i').exec(text)
+    return m ? m[1].trim() : ''
+  }
+  const balamt = getField(content, 'BALAMT')
+  const dtasof = getField(content, 'DTASOF')
+  if (!balamt || !dtasof) return null
+  const rawDate = dtasof.replace(/\[.*\]/, '').slice(0, 8)
+  if (rawDate.length < 8) return null
+  return {
+    valor: parseFloat(balamt.replace(',', '.')) || 0,
+    data: `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`,
+  }
+}
+
 function parseOFX(content: string): OFXTransaction[] {
   const transactions: OFXTransaction[] = []
   const text = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -77,8 +98,9 @@ export async function POST(req: NextRequest) {
 
     const content = await file.text()
     const transactions = parseOFX(content)
+    const saldo = parseOFXSaldo(content)
 
-    return NextResponse.json({ transactions, total: transactions.length })
+    return NextResponse.json({ transactions, total: transactions.length, saldo })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

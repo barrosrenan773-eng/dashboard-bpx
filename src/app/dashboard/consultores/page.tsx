@@ -451,7 +451,7 @@ function ConsultantCard({
         />
         <ProgressMetric
           label={L.leadsRecebidos} value={v.leads} target={meta_leads} expectedPct={expectedPct}
-          colorBar={barLeads} formatValue={n => String(n)}
+          colorBar={barLeads} formatValue={n => String(Math.round(n))}
           rightTop={meta_leads > 0 ? `${pctLeads.toFixed(0)}% da meta` : undefined}
           leadsHoje={v.leadsHoje}
           bottomLeft={meta_leads > 0 ? `${v.leads} / ${meta_leads} meta` : `${v.leads} leads`}

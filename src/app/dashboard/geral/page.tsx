@@ -106,6 +106,8 @@ export default function GeralPage() {
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [despesas, setDespesas] = useState<Despesa[]>([])
   const [loading, setLoading] = useState(true)
+  const [folhaPrevista, setFolhaPrevista] = useState(0)
+  const [comissoesDoMes, setComissoesDoMes] = useState(0)
 
   const [periodo, setPeriodo] = useState<PeriodoKey>('mes')
   const [customStart, setCustomStart] = useState<string>(toISODate(startOfMonth(today)))
@@ -116,14 +118,47 @@ export default function GeralPage() {
     const load = async () => {
       setLoading(true)
       try {
-        const [cRes, dRes] = await Promise.all([
+        const mesMesAtual = new Date().toISOString().slice(0, 7)
+        const [cRes, dRes, fRes, mRes] = await Promise.all([
           fetch('/api/contratos'),
           fetch('/api/despesas'),
+          fetch(`/api/previsao-folha?mes=${mesMesAtual}`),
+          fetch(`/api/metas-vendedor?mes=${mesMesAtual}`),
         ])
         const cData = cRes.ok ? await cRes.json() : []
         const dData = dRes.ok ? await dRes.json() : []
         setContratos(Array.isArray(cData) ? cData : [])
         setDespesas(Array.isArray(dData) ? dData : [])
+
+        // Folha
+        const fData = fRes.ok ? await fRes.json() : {}
+        setFolhaPrevista(Number(fData?.valor) || 0)
+
+        // Comissões
+        const metasArr: { vendedor: string; meta: number }[] = mRes.ok ? await mRes.json() : []
+        const metasMap: Record<string, number> = {}
+        if (Array.isArray(metasArr)) metasArr.forEach(mv => { metasMap[mv.vendedor] = mv.meta })
+        const doMes = (Array.isArray(cData) ? cData : []).filter((c: { status: string; data_finalizacao?: string | null; created_at: string }) => {
+          if (c.status !== 'finalizado') return false
+          const dr = c.data_finalizacao || c.created_at
+          return dr?.slice(0, 7) === mesMesAtual
+        })
+        const taxaMap: Record<string, number> = {}
+        for (const c of doMes) {
+          const temDois = !!c.assistente && !!c.analista
+          for (const nome of [c.assistente, c.analista]) {
+            if (!nome) continue
+            taxaMap[nome] = (taxaMap[nome] ?? 0) + (temDois ? c.taxa / 2 : c.taxa)
+          }
+        }
+        let totalComissoes = 0
+        for (const [nome, taxa] of Object.entries(taxaMap)) {
+          const meta = metasMap[nome] ?? 0
+          const pct = meta > 0 ? (taxa / meta) * 100 : 0
+          const perc = pct < 70 ? 0 : pct < 81 ? 1.5 : pct < 91 ? 2 : pct < 131 ? 3 : pct < 150 ? 4 : 5
+          totalComissoes += taxa * (perc / 100)
+        }
+        setComissoesDoMes(totalComissoes)
       } catch {
         // silent
       } finally {
@@ -169,10 +204,22 @@ export default function GeralPage() {
   )
 
   // KPIs baseados APENAS em contratos finalizados
-  const kpis = useMemo(
+  const kpisBase = useMemo(
     () => calcularKPIs(contratosFinalizados, despesasFiltradas),
     [contratosFinalizados, despesasFiltradas]
   )
+
+  // Adiciona folha + comissões às despesas/lucro apenas quando período = mês atual
+  const kpis = useMemo(() => {
+    if (periodo !== 'mes') return kpisBase
+    const extra = folhaPrevista + comissoesDoMes
+    return {
+      ...kpisBase,
+      despesas: kpisBase.despesas + extra,
+      lucro: kpisBase.lucro - extra,
+      margem: kpisBase.receita > 0 ? ((kpisBase.lucro - extra) / kpisBase.receita) * 100 : 0,
+    }
+  }, [kpisBase, periodo, folhaPrevista, comissoesDoMes])
 
   // Pipeline: contratos aguardando liberação de margem
   const pipeline = useMemo(() => ({
@@ -196,6 +243,21 @@ export default function GeralPage() {
     () => calcularDistribuicaoLucro(kpis.lucro),
     [kpis.lucro]
   )
+
+  // Produção por pessoa (assistente/analista) — baseado em contratos finalizados do período
+  const resumoPessoas = useMemo(() => {
+    const map: Record<string, { nome: string; qtd: number; taxa: number }> = {}
+    for (const c of contratosFinalizados) {
+      const temDois = !!c.assistente && !!c.analista
+      for (const nome of [c.assistente, c.analista]) {
+        if (!nome) continue
+        if (!map[nome]) map[nome] = { nome, qtd: 0, taxa: 0 }
+        map[nome].qtd++
+        map[nome].taxa += temDois ? c.taxa / 2 : c.taxa
+      }
+    }
+    return Object.values(map).sort((a, b) => b.taxa - a.taxa)
+  }, [contratosFinalizados])
 
   const handlePeriodo = (p: PeriodoKey) => {
     setPeriodo(p)
@@ -511,7 +573,16 @@ export default function GeralPage() {
                   ) : (
                     contratosPeriodo.slice(0, 20).map((c) => (
                       <tr key={c.id} className="hover:bg-zinc-800/40 transition-colors">
-                        <td className="px-5 py-3 text-white font-medium truncate max-w-[140px]">{c.nome}</td>
+                        <td className="px-5 py-3">
+                          <p className="text-white font-medium">{c.nome}</p>
+                          {(c.telefone || c.cpf) && (
+                            <p className="text-zinc-500 text-xs mt-0.5">
+                              {c.telefone && <span>{c.telefone}</span>}
+                              {c.telefone && c.cpf && <span className="mx-1">·</span>}
+                              {c.cpf && <span>{c.cpf}</span>}
+                            </p>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-right text-amber-400">{formatCurrency(Number(c.capital) || 0)}</td>
                         <td className="px-4 py-3 text-right text-emerald-400">{formatCurrency(Number(c.taxa) || 0)}</td>
                         <td className="px-4 py-3 text-center">
@@ -614,6 +685,36 @@ export default function GeralPage() {
                   </span>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── PRODUÇÃO POR PESSOA ── */}
+        {resumoPessoas.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-800">
+              <h3 className="text-white font-semibold text-sm">Produção por Pessoa</h3>
+              <p className="text-zinc-500 text-xs mt-0.5">Taxa proporcional dos contratos finalizados no período · 50% cada quando há assistente + analista</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                    <th className="text-left px-5 py-3 font-medium">Pessoa</th>
+                    <th className="text-right px-4 py-3 font-medium">Contratos</th>
+                    <th className="text-right px-5 py-3 font-medium">Taxa proporcional</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {resumoPessoas.map(p => (
+                    <tr key={p.nome} className="hover:bg-zinc-800/40 transition-colors">
+                      <td className="px-5 py-3 text-white font-medium">{p.nome}</td>
+                      <td className="px-4 py-3 text-right text-zinc-400">{p.qtd}</td>
+                      <td className="px-5 py-3 text-right text-emerald-400 font-semibold">{formatCurrency(p.taxa)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

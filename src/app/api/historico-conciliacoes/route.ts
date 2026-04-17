@@ -20,8 +20,6 @@ export async function GET(req: NextRequest) {
 
   if (mes) {
     query = query.eq('mes_referencia', mes)
-  } else {
-    query = query.limit(50)
   }
 
   const { data, error } = await query
@@ -40,6 +38,24 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
+}
+
+export async function PATCH(req: NextRequest) {
+  const supabase = getSupabase()
+  const { id, fitid, descricao } = await req.json()
+  if (!id || !fitid) return NextResponse.json({ error: 'id e fitid obrigatórios' }, { status: 400 })
+
+  const { data: row, error: fetchErr } = await supabase
+    .from('historico_conciliacoes').select('detalhes').eq('id', id).single()
+  if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+
+  const detalhes = (row?.detalhes ?? []).map((d: any) =>
+    d.fitid === fitid ? { ...d, descricao } : d
+  )
+  const { error } = await supabase
+    .from('historico_conciliacoes').update({ detalhes }).eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
 }
 
 export async function DELETE(req: NextRequest) {

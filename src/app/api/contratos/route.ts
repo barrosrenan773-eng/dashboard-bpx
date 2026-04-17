@@ -36,7 +36,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const supabase = getSupabase()
   const body = await req.json()
-  const { nome, servico, origem, capital, taxa, status, data_finalizacao } = body
+  const { nome, servico, origem, capital, taxa, status, data_finalizacao, observacoes, telefone, cpf, assistente, analista } = body
 
   if (!nome || !servico) {
     return NextResponse.json({ error: 'nome e servico obrigatórios' }, { status: 400 })
@@ -44,7 +44,19 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('contratos')
-    .insert({ nome, servico, origem: origem ?? null, capital: capital ?? 0, taxa: taxa ?? 0, status: status ?? 'aguardando', data_finalizacao: data_finalizacao ?? null })
+    .insert({
+      nome, servico,
+      origem: origem ?? null,
+      capital: capital ?? 0,
+      taxa: taxa ?? 0,
+      status: status ?? 'aguardando',
+      data_finalizacao: data_finalizacao ?? null,
+      observacoes: observacoes ?? null,
+      telefone: telefone ?? null,
+      cpf: cpf ?? null,
+      assistente: assistente ?? null,
+      analista: analista ?? null,
+    })
     .select()
     .single()
 
