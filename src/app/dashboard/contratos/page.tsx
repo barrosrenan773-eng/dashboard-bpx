@@ -286,6 +286,14 @@ export default function ContratosPage() {
     return { ...p, pct, percComissao, comissao }
   }).sort((a, b) => b.taxa - a.taxa)
 
+  // Filtro por mês (mesmo critério do geral)
+  const [y, m] = mesFiltro.split('-').map(Number)
+  const dateStart = new Date(y, m - 1, 1)
+  const dateEnd   = new Date(y, m, 0, 23, 59, 59)
+  const contratosMes       = filtrarContratos(contratos, dateStart, dateEnd)
+  const finalizadosMes     = filtrarContratos(contratos, dateStart, dateEnd, 'finalizado')
+  const aguardandoMes      = filtrarContratos(contratos, dateStart, dateEnd, 'aguardando')
+
   // Filtros encadeados: serviço → pessoa (sobre contratosMes)
   const contratosPorServico = filtroServico === 'todos'
     ? contratosMes
@@ -294,14 +302,6 @@ export default function ContratosPage() {
   const contratosFiltrados = filtroPessoa === 'todos'
     ? contratosPorServico
     : contratosPorServico.filter(c => c.assistente === filtroPessoa || c.analista === filtroPessoa)
-
-  // Filtro por mês (mesmo critério do geral)
-  const [y, m] = mesFiltro.split('-').map(Number)
-  const dateStart = new Date(y, m - 1, 1)
-  const dateEnd   = new Date(y, m, 0, 23, 59, 59)
-  const contratosMes       = filtrarContratos(contratos, dateStart, dateEnd)
-  const finalizadosMes     = filtrarContratos(contratos, dateStart, dateEnd, 'finalizado')
-  const aguardandoMes      = filtrarContratos(contratos, dateStart, dateEnd, 'aguardando')
 
   const totalCapital   = contratosMes.reduce((s, c) => s + c.capital, 0)   // todos os contratos do mês
   const totalTaxas     = contratosMes.reduce((s, c) => s + c.taxa, 0)
