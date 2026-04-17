@@ -640,6 +640,13 @@ function ConsultoresInner() {
 
   useEffect(() => { load(start, end) }, [start, end, load])
 
+  // Auto-refresh a cada 2min em modo normal (mantém leads hoje atualizado)
+  useEffect(() => {
+    if (tvMode) return
+    const interval = setInterval(() => load(start, end), 2 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [tvMode, start, end, load])
+
   // TV mode: fullscreen + auto-refresh a cada 60s
   useEffect(() => {
     if (!tvMode) return
