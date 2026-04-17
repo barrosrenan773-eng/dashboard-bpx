@@ -1060,7 +1060,8 @@ export default function FinanceiroPage() {
   const [addingReceita, setAddingReceita] = useState<AddingState>(null)
   const [editingReceita, setEditingReceita] = useState<EditingState>(null)
   const [expandedCatsReceita, setExpandedCatsReceita] = useState<Set<string>>(new Set())
-  const [receita, setReceita] = useState(0)
+  const [receitaConsignado, setReceitaConsignado] = useState(0)
+  const [receitaCompraDivida, setReceitaCompraDivida] = useState(0)
   const [metaAdsSpend, setMetaAdsSpend] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState<AddingState>(null)
@@ -1121,14 +1122,17 @@ export default function FinanceiroPage() {
   async function loadContratos(m: string) {
     const r = await fetch('/api/contratos')
     const data = await r.json()
-    const total = Array.isArray(data)
+    const doMes = Array.isArray(data)
       ? data.filter((c: { status?: string; data_finalizacao?: string; created_at?: string }) => {
           if (c.status !== 'finalizado') return false
-          const ref = c.data_finalizacao || c.created_at
+          const ref = (c as any).data_finalizacao || c.created_at
           return ref?.slice(0, 7) === m
-        }).reduce((s: number, c: { taxa?: number }) => s + (c.taxa ?? 0), 0)
-      : 0
-    setReceita(total)
+        })
+      : []
+    const consignado   = doMes.filter((c: any) => c.servico === 'Consignado').reduce((s: number, c: any) => s + (c.taxa ?? 0), 0)
+    const compraDivida = doMes.filter((c: any) => c.servico === 'Compra de Dívida').reduce((s: number, c: any) => s + (c.taxa ?? 0), 0)
+    setReceitaConsignado(consignado)
+    setReceitaCompraDivida(compraDivida)
   }
 
   async function loadMetaAds(m: string) {
@@ -1306,6 +1310,7 @@ export default function FinanceiroPage() {
     })
   const totalDespesasPeriodo = despesasPeriodo.reduce((s, d) => s + Number(d.valor), 0)
   const receitasFiltradas = empresaFiltro ? receitasManuais.filter(r => r.empresa === empresaFiltro) : receitasManuais
+  const receita = receitaConsignado + receitaCompraDivida
   const receitaContratosF = empresaFiltro ? 0 : receita // contratos não têm empresa ainda
   const totalDespesas = despesasFiltradas.reduce((s, d) => s + Number(d.valor), 0)
     + (empresaFiltro ? 0 : (metaAdsSpend ?? 0))
@@ -1782,10 +1787,16 @@ export default function FinanceiroPage() {
                   <span className="text-emerald-400 font-bold text-sm">{formatCurrency(receitaTotal)}</span>
                 </div>
                 <div className="space-y-0.5">
-                  {receitaContratosF > 0 && (
+                  {!empresaFiltro && receitaConsignado > 0 && (
                     <div className="flex items-center justify-between py-1.5 px-2">
-                      <span className="text-zinc-400 text-sm">Taxas de Contratos</span>
-                      <span className="text-zinc-300 text-sm font-medium">{formatCurrency(receitaContratosF)}</span>
+                      <span className="text-zinc-400 text-sm">Consignado</span>
+                      <span className="text-zinc-300 text-sm font-medium">{formatCurrency(receitaConsignado)}</span>
+                    </div>
+                  )}
+                  {!empresaFiltro && receitaCompraDivida > 0 && (
+                    <div className="flex items-center justify-between py-1.5 px-2">
+                      <span className="text-zinc-400 text-sm">Compra de Dívida</span>
+                      <span className="text-zinc-300 text-sm font-medium">{formatCurrency(receitaCompraDivida)}</span>
                     </div>
                   )}
                   {CATEGORIAS_RECEITA.map(({ key, label }) => {
