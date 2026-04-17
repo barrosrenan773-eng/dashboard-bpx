@@ -299,13 +299,15 @@ export default function ContratosPage() {
   const [y, m] = mesFiltro.split('-').map(Number)
   const dateStart = new Date(y, m - 1, 1)
   const dateEnd   = new Date(y, m, 0, 23, 59, 59)
-  const contratosMes = filtrarContratos(contratos, dateStart, dateEnd)
+  const contratosMes       = filtrarContratos(contratos, dateStart, dateEnd)
+  const finalizadosMes     = filtrarContratos(contratos, dateStart, dateEnd, 'finalizado')
+  const aguardandoMes      = filtrarContratos(contratos, dateStart, dateEnd, 'aguardando')
 
-  const totalCapital = contratosMes.reduce((s, c) => s + c.capital, 0)
-  const totalTaxas = contratosMes.reduce((s, c) => s + c.taxa, 0)
-  const totalGeral = totalCapital + totalTaxas
-  const totalFinalizados = contratosMes.filter(c => c.status === 'finalizado').length
-  const emAndamento = contratosMes.filter(c => c.status !== 'finalizado').length
+  const totalCapital   = contratosMes.reduce((s, c) => s + c.capital, 0)   // todos os contratos do mês
+  const totalTaxas     = contratosMes.reduce((s, c) => s + c.taxa, 0)
+  const totalGeral     = totalCapital + totalTaxas
+  const totalFinalizados = finalizadosMes.length
+  const emAndamento    = aguardandoMes.length
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950">

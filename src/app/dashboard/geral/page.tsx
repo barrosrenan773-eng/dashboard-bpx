@@ -203,11 +203,12 @@ export default function GeralPage() {
     [despesas, dateStart, dateEnd]
   )
 
-  // KPIs baseados APENAS em contratos finalizados
-  const kpisBase = useMemo(
-    () => calcularKPIs(contratosFinalizados, despesasFiltradas),
-    [contratosFinalizados, despesasFiltradas]
-  )
+  // KPIs: receita/lucro/margem dos finalizados, capital de todos do período
+  const kpisBase = useMemo(() => {
+    const base = calcularKPIs(contratosFinalizados, despesasFiltradas)
+    const capitalTotal = contratosPeriodo.reduce((s, c) => s + (Number(c.capital) || 0), 0)
+    return { ...base, capital: capitalTotal }
+  }, [contratosFinalizados, contratosPeriodo, despesasFiltradas])
 
   // Adiciona folha + comissões às despesas/lucro apenas quando período = mês atual
   const kpis = useMemo(() => {
