@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { Header } from '@/components/layout/Header'
 import { formatCurrency } from '@/lib/utils'
-import { KPI_LABELS as L } from '@/lib/calculos'
+import { KPI_LABELS as L, filtrarContratos } from '@/lib/calculos'
 import {
   Plus, Pencil, Trash2, X, Check,
   FileText, Briefcase, DollarSign, TrendingUp, Clock, CheckCircle2,
@@ -93,10 +93,11 @@ export default function ContratosPage() {
   const [error, setError] = useState('')
   const [consultores, setConsultores] = useState<{ id: string; nome: string }[]>([])
   const [metas, setMetas] = useState<Record<string, number>>({}) // nome → meta em R$
-  const [mesComissao, setMesComissao] = useState<string>(() => {
+  const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   })
+  const mesComissao = mesFiltro
 
   // Arquivo anexo
   const anexoRef = useRef<HTMLInputElement>(null)
@@ -285,20 +286,26 @@ export default function ContratosPage() {
     return { ...p, pct, percComissao, comissao }
   }).sort((a, b) => b.taxa - a.taxa)
 
-  // Filtros encadeados: serviço → pessoa
+  // Filtros encadeados: serviço → pessoa (sobre contratosMes)
   const contratosPorServico = filtroServico === 'todos'
-    ? contratos
-    : contratos.filter(c => c.servico === filtroServico)
+    ? contratosMes
+    : contratosMes.filter(c => c.servico === filtroServico)
 
   const contratosFiltrados = filtroPessoa === 'todos'
     ? contratosPorServico
     : contratosPorServico.filter(c => c.assistente === filtroPessoa || c.analista === filtroPessoa)
 
-  const totalCapital = contratos.reduce((s, c) => s + c.capital, 0)
-  const totalTaxas = contratos.reduce((s, c) => s + c.taxa, 0)
+  // Filtro por mês (mesmo critério do geral)
+  const [y, m] = mesFiltro.split('-').map(Number)
+  const dateStart = new Date(y, m - 1, 1)
+  const dateEnd   = new Date(y, m, 0, 23, 59, 59)
+  const contratosMes = filtrarContratos(contratos, dateStart, dateEnd)
+
+  const totalCapital = contratosMes.reduce((s, c) => s + c.capital, 0)
+  const totalTaxas = contratosMes.reduce((s, c) => s + c.taxa, 0)
   const totalGeral = totalCapital + totalTaxas
-  const totalFinalizados = contratos.filter(c => c.status === 'finalizado').length
-  const emAndamento = contratos.filter(c => c.status !== 'finalizado').length
+  const totalFinalizados = contratosMes.filter(c => c.status === 'finalizado').length
+  const emAndamento = contratosMes.filter(c => c.status !== 'finalizado').length
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950">
@@ -306,12 +313,24 @@ export default function ContratosPage() {
 
       <div className="p-6 space-y-6">
 
+        {/* ── Filtro de mês ── */}
+        <div className="flex items-center gap-3">
+          <label className="text-zinc-400 text-sm">Mês:</label>
+          <input
+            type="month"
+            value={mesFiltro}
+            onChange={e => setMesFiltro(e.target.value)}
+            className="bg-zinc-900 border border-zinc-700 text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-zinc-500"
+          />
+          <span className="text-zinc-500 text-xs">{contratosMes.length} contrato{contratosMes.length !== 1 ? 's' : ''} no período</span>
+        </div>
+
         {/* ── KPIs ── */}
         <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
           <KpiCard
             label="Total"
-            value={String(contratos.length)}
-            sub={`${contratos.length} contrato${contratos.length !== 1 ? 's' : ''} cadastrado${contratos.length !== 1 ? 's' : ''}`}
+            value={String(contratosMes.length)}
+            sub={`${contratosMes.length} contrato${contratosMes.length !== 1 ? 's' : ''} no mês`}
             icon={FileText}
             color="#71717a"
             colorClass="text-zinc-400"
