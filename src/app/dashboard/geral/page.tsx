@@ -108,6 +108,8 @@ export default function GeralPage() {
   const [loading, setLoading] = useState(true)
   const [folhaPrevista, setFolhaPrevista] = useState(0)
   const [comissoesDoMes, setComissoesDoMes] = useState(0)
+  const [receitasManuais, setReceitasManuais] = useState(0)
+  const [metaAdsSpend, setMetaAdsSpend] = useState(0)
 
   const [periodo, setPeriodo] = useState<PeriodoKey>('mes')
   const [customStart, setCustomStart] = useState<string>(toISODate(startOfMonth(today)))
@@ -119,11 +121,13 @@ export default function GeralPage() {
       setLoading(true)
       try {
         const mesMesAtual = new Date().toISOString().slice(0, 7)
-        const [cRes, dRes, fRes, mRes] = await Promise.all([
+        const [cRes, dRes, fRes, mRes, rRes, adRes] = await Promise.all([
           fetch('/api/contratos'),
           fetch('/api/despesas'),
           fetch(`/api/previsao-folha?mes=${mesMesAtual}`),
           fetch(`/api/metas-vendedor?mes=${mesMesAtual}`),
+          fetch(`/api/receitas?mes=${mesMesAtual}`),
+          fetch(`/api/meta-ads?mes=${mesMesAtual}`),
         ])
         const cData = cRes.ok ? await cRes.json() : []
         const dData = dRes.ok ? await dRes.json() : []
@@ -159,6 +163,15 @@ export default function GeralPage() {
           totalComissoes += taxa * (perc / 100)
         }
         setComissoesDoMes(totalComissoes)
+
+        // Receitas manuais
+        const rData = rRes.ok ? await rRes.json() : []
+        const totalRec = Array.isArray(rData) ? rData.reduce((s: number, r: { valor: number }) => s + (Number(r.valor) || 0), 0) : 0
+        setReceitasManuais(totalRec)
+
+        // Meta Ads
+        const adData = adRes.ok ? await adRes.json() : {}
+        setMetaAdsSpend(Number(adData?.spend) || 0)
       } catch {
         // silent
       } finally {
@@ -214,17 +227,20 @@ export default function GeralPage() {
     return { ...base, capital: capitalTotal, producao: producaoTotal }
   }, [contratosFinalizados, contratosPeriodo, despesasFiltradas])
 
-  // Adiciona folha + comissões às despesas/lucro apenas quando período = mês atual
+  // Adiciona folha + comissões + metaAds às despesas, receitas manuais à receita
   const kpis = useMemo(() => {
     if (periodo !== 'mes') return kpisBase
-    const extra = folhaPrevista + comissoesDoMes
+    const extraDespesas = folhaPrevista + comissoesDoMes + metaAdsSpend
+    const receita = kpisBase.receita + receitasManuais
+    const lucro = receita - kpisBase.despesas - extraDespesas
     return {
       ...kpisBase,
-      despesas: kpisBase.despesas + extra,
-      lucro: kpisBase.lucro - extra,
-      margem: kpisBase.receita > 0 ? ((kpisBase.lucro - extra) / kpisBase.receita) * 100 : 0,
+      receita,
+      despesas: kpisBase.despesas + extraDespesas,
+      lucro,
+      margem: receita > 0 ? (lucro / receita) * 100 : 0,
     }
-  }, [kpisBase, periodo, folhaPrevista, comissoesDoMes])
+  }, [kpisBase, periodo, folhaPrevista, comissoesDoMes, metaAdsSpend, receitasManuais])
 
   // Pipeline: contratos aguardando liberação de margem
   const pipeline = useMemo(() => ({
