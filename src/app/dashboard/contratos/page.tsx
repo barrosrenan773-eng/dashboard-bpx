@@ -307,7 +307,7 @@ export default function ContratosPage() {
       <div className="p-6 space-y-6">
 
         {/* ── KPIs ── */}
-        <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
           <KpiCard
             label="Total"
             value={String(contratos.length)}
@@ -327,13 +327,22 @@ export default function ContratosPage() {
             bgClass="bg-blue-500/10"
           />
           <KpiCard
-            label={L.receitaTotal}
+            label="Receita Finalizada"
             value={formatCurrency(contratos.filter(c => c.status === 'finalizado').reduce((s, c) => s + c.taxa, 0))}
             sub={`${totalFinalizados} contratos finalizados`}
             icon={DollarSign}
             color="#10B981"
             colorClass="text-emerald-400"
             bgClass="bg-emerald-500/10"
+          />
+          <KpiCard
+            label="Receita Total (c/ andamento)"
+            value={formatCurrency(totalTaxas)}
+            sub={`Finalizados + ${emAndamento} em andamento`}
+            icon={TrendingUp}
+            color="#8B5CF6"
+            colorClass="text-violet-400"
+            bgClass="bg-violet-500/10"
           />
           <KpiCard
             label="Finalizados"
