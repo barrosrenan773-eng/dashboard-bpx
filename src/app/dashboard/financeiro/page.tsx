@@ -1062,6 +1062,7 @@ export default function FinanceiroPage() {
   const [expandedCatsReceita, setExpandedCatsReceita] = useState<Set<string>>(new Set())
   const [receitaConsignado, setReceitaConsignado] = useState(0)
   const [receitaCompraDivida, setReceitaCompraDivida] = useState(0)
+  const [receitaCCA2Contratos, setReceitaCCA2Contratos] = useState(0)
   const [metaAdsSpend, setMetaAdsSpend] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState<AddingState>(null)
@@ -1091,7 +1092,7 @@ export default function FinanceiroPage() {
   const [ofxConciliandoFitid, setOfxConciliandoFitid] = useState<string | null>(null)
   const [ofxDone, setOfxDone] = useState(0)
   const [ofxSaldo, setOfxSaldo] = useState<{ valor: number; data: string } | null>(null)
-  const [historicoConciliacoes, setHistoricoConciliacoes] = useState<{id: string; created_at: string; mes_referencia: string; qtd_transacoes: number; valor_total: number; detalhes: {despesa_id?: number; descricao: string; categoria: string; valor: number; fitid?: string; tipo?: string; data?: string; mes?: string}[]}[]>([])
+  const [historicoConciliacoes, setHistoricoConciliacoes] = useState<{id: string; created_at: string; mes_referencia: string; qtd_transacoes: number; valor_total: number; detalhes: {despesa_id?: number; descricao: string; categoria: string; valor: number; fitid?: string; tipo?: string; data?: string; mes?: string; empresa?: string}[]}[]>([])
   const [historicoExpanded, setHistoricoExpanded] = useState<Set<string>>(new Set())
   const [histFiltro, setHistFiltro] = useState<'hoje' | 'periodo'>('periodo')
   const [histInicio, setHistInicio] = useState(() => {
@@ -1131,8 +1132,10 @@ export default function FinanceiroPage() {
       : []
     const consignado   = doMes.filter((c: any) => c.servico === 'Consignado').reduce((s: number, c: any) => s + (c.taxa ?? 0), 0)
     const compraDivida = doMes.filter((c: any) => c.servico === 'Compra de Dívida').reduce((s: number, c: any) => s + (c.taxa ?? 0), 0)
+    const cca2 = doMes.filter((c: any) => c.origem === 'CCA2').reduce((s: number, c: any) => s + (c.taxa ?? 0), 0)
     setReceitaConsignado(consignado)
     setReceitaCompraDivida(compraDivida)
+    setReceitaCCA2Contratos(cca2)
   }
 
   async function loadMetaAds(m: string) {
@@ -1311,11 +1314,18 @@ export default function FinanceiroPage() {
   const totalDespesasPeriodo = despesasPeriodo.reduce((s, d) => s + Number(d.valor), 0)
   const receitasFiltradas = empresaFiltro ? receitasManuais.filter(r => r.empresa === empresaFiltro) : receitasManuais
   const receita = receitaConsignado + receitaCompraDivida
-  const receitaContratosF = empresaFiltro ? 0 : receita // contratos não têm empresa ainda
-  const totalDespesas = despesasFiltradas.reduce((s, d) => s + Number(d.valor), 0)
+  const receitaContratosF = empresaFiltro === 'CCA2' ? receitaCCA2Contratos : empresaFiltro ? 0 : receita
+  const despesasBase = despesasFiltradas.reduce((s, d) => s + Number(d.valor), 0)
+  // comissão Francisco HSF = 5% do lucro bruto CCA2 (antes da comissão, para evitar recursão)
+  const lucroBrutoCCA2 = empresaFiltro === 'CCA2'
+    ? receitaContratosF + (receitasFiltradas.reduce((s, r) => s + Number(r.valor), 0)) - despesasBase
+    : 0
+  const comissaoFrancisco = empresaFiltro === 'CCA2' ? Math.max(0, lucroBrutoCCA2) * 0.05 : 0
+  const totalDespesas = despesasBase
     + (empresaFiltro ? 0 : (metaAdsSpend ?? 0))
     + (empresaFiltro ? 0 : folhaPrevista)
     + (empresaFiltro ? 0 : comissoesDoMes)
+    + comissaoFrancisco
   const totalReceitasManuais = receitasFiltradas.reduce((s, r) => s + Number(r.valor), 0)
   const receitaTotal = receitaContratosF + totalReceitasManuais
   const lucro = receitaTotal - totalDespesas
@@ -1487,7 +1497,7 @@ export default function FinanceiroPage() {
         mes_referencia: mes,
         qtd_transacoes: toCreate.length,
         valor_total: toCreate.reduce((s, t) => s + t.valor, 0),
-        detalhes: toCreate.map(t => ({ descricao: ofxDescricoes[t.fitid] || t.descricao, categoria: ofxCats[t.fitid], valor: t.valor })),
+        detalhes: toCreate.map(t => ({ descricao: ofxDescricoes[t.fitid] || t.descricao, categoria: ofxCats[t.fitid], valor: t.valor, empresa: ofxEmpresas[t.fitid] || 'BPX' })),
       }),
     })
     await salvarSaldoOFX()
@@ -1545,6 +1555,7 @@ export default function FinanceiroPage() {
             tipo: t.tipo,
             data: t.data,
             mes: t.mes,
+            empresa: ofxEmpresas[t.fitid] || 'BPX',
           }],
         }),
       })
@@ -1799,6 +1810,14 @@ export default function FinanceiroPage() {
                       <span className="text-zinc-300 text-sm font-medium">{formatCurrency(receitaCompraDivida)}</span>
                     </div>
                   )}
+                  {empresaFiltro === 'CCA2' && receitaCCA2Contratos > 0 && (
+                    <div className="flex items-center justify-between py-1.5 px-2">
+                      <span className="text-zinc-400 text-sm">Contratos CCA2
+                        <span className="ml-1.5 text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1 py-0.5 rounded-full text-[10px]">auto</span>
+                      </span>
+                      <span className="text-zinc-300 text-sm font-medium">{formatCurrency(receitaCCA2Contratos)}</span>
+                    </div>
+                  )}
                   {CATEGORIAS_RECEITA.map(({ key, label }) => {
                     const items = receitasFiltradas.filter(r => r.categoria === key)
                     const subtotal = items.reduce((s, r) => s + Number(r.valor), 0)
@@ -1902,10 +1921,11 @@ export default function FinanceiroPage() {
                 {totalDespesasPeriodo > 0 && (() => {
                   const BAR_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#6366f1','#a855f7','#ec4899','#14b8a6','#f59e0b','#84cc16','#3b82f6']
                   const cats = [
-                    ...(metaAdsSpend && !empresaFiltro ? [{ key: '__marketing__', valor: metaAdsSpend }] : []),
                     ...CATEGORIAS.map(({ key }) => {
                       const base = despesasPeriodo.filter(d => d.categoria === key).reduce((s, d) => s + Number(d.valor), 0)
-                      const extra = (key === 'dept_pessoal' && !empresaFiltro) ? folhaPrevista + comissoesDoMes : 0
+                      const extra = (key === 'dept_pessoal' && !empresaFiltro) ? folhaPrevista + comissoesDoMes
+                        : (key === 'marketing' && !empresaFiltro) ? (metaAdsSpend ?? 0)
+                        : 0
                       return { key, valor: base + extra }
                     }).filter(c => c.valor > 0),
                   ].sort((a, b) => b.valor - a.valor)
@@ -1919,40 +1939,19 @@ export default function FinanceiroPage() {
                 })()}
 
                 <div className="space-y-1">
-                  {/* Marketing auto */}
-                  {metaAdsSpend !== null && !empresaFiltro && (
-                    <div>
-                      <button onClick={() => toggleCat('__marketing__')} className="w-full flex items-center gap-3 py-2 hover:bg-zinc-800/40 rounded-lg px-2 transition-colors">
-                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: '#f97316' }} />
-                        <span className="text-zinc-300 text-sm flex-1 text-left">Marketing</span>
-                        <span className="text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full">auto</span>
-                        <div className="w-24 mx-2 bg-zinc-800 rounded-full h-1.5">
-                          <div className="h-1.5 rounded-full" style={{ width: `${Math.min((metaAdsSpend / totalDespesasPeriodo) * 100, 100)}%`, background: '#f97316', opacity: 0.7 }} />
-                        </div>
-                        <span className="text-zinc-500 text-xs w-10 text-right">{totalDespesasPeriodo > 0 ? ((metaAdsSpend / totalDespesasPeriodo) * 100).toFixed(0) : 0}%</span>
-                        <span className="text-zinc-300 text-sm font-medium w-28 text-right">{formatCurrency(metaAdsSpend)}</span>
-                        {expandedCats.has('__marketing__') ? <ChevronUp className="w-3.5 h-3.5 text-zinc-600" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-600" />}
-                      </button>
-                      {expandedCats.has('__marketing__') && (
-                        <div className="ml-8 py-1 mb-1">
-                          <div className="flex items-center justify-between py-1">
-                            <span className="text-zinc-500 text-xs">Facebook Ads</span>
-                            <span className="text-zinc-400 text-xs">{formatCurrency(metaAdsSpend)}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* Marketing auto — fundido com categoria marketing abaixo */}
 
                   {/* Categorias DRE ordenadas por valor */}
                   {(() => {
                     const BAR_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#6366f1','#a855f7','#ec4899','#14b8a6','#f59e0b','#84cc16','#3b82f6']
-                    const colorOffset = (metaAdsSpend && !empresaFiltro) ? 1 : 0
+                    const colorOffset = 0
                     return [...CATEGORIAS]
                       .map(({ key, label }) => {
                         const items = despesasPeriodo.filter(d => d.categoria === key)
                         const base = items.reduce((s, d) => s + Number(d.valor), 0)
-                        const extra = (key === 'dept_pessoal' && !empresaFiltro) ? folhaPrevista + comissoesDoMes : 0
+                        const extra = (key === 'dept_pessoal' && !empresaFiltro) ? folhaPrevista + comissoesDoMes
+                          : (key === 'marketing' && !empresaFiltro) ? (metaAdsSpend ?? 0)
+                          : 0
                         return { key, label, items, subtotal: base + extra }
                       })
                       .sort((a, b) => b.subtotal - a.subtotal)
@@ -2005,6 +2004,15 @@ export default function FinanceiroPage() {
                                     )}
                                   </div>
                                 ))}
+                                {/* Facebook Ads como sub-item virtual em marketing */}
+                                {key === 'marketing' && !empresaFiltro && (metaAdsSpend ?? 0) > 0 && (
+                                  <div className="flex items-center justify-between py-1">
+                                    <span className="text-zinc-500 text-xs flex-1">Facebook Ads
+                                      <span className="ml-1.5 text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1 py-0.5 rounded-full text-[10px]">auto</span>
+                                    </span>
+                                    <span className="text-zinc-400 text-xs font-medium">{formatCurrency(metaAdsSpend ?? 0)}</span>
+                                  </div>
+                                )}
                                 {/* Folha e comissões como sub-itens virtuais em dept_pessoal */}
                                 {key === 'dept_pessoal' && !empresaFiltro && folhaPrevista > 0 && (
                                   <div className="flex items-center justify-between py-1">
@@ -2012,6 +2020,14 @@ export default function FinanceiroPage() {
                                       <span className="ml-1.5 text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1 py-0.5 rounded-full text-[10px]">previsão</span>
                                     </span>
                                     <span className="text-zinc-400 text-xs font-medium">{formatCurrency(folhaPrevista)}</span>
+                                  </div>
+                                )}
+                                {key === 'dept_pessoal' && empresaFiltro === 'CCA2' && comissaoFrancisco > 0 && (
+                                  <div className="flex items-center justify-between py-1">
+                                    <span className="text-zinc-500 text-xs flex-1">Francisco HSF
+                                      <span className="ml-1.5 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.5 rounded-full text-[10px]">5% lucro CCA2</span>
+                                    </span>
+                                    <span className="text-zinc-400 text-xs font-medium">{formatCurrency(comissaoFrancisco)}</span>
                                   </div>
                                 )}
                                 {key === 'dept_pessoal' && !empresaFiltro && comissoesDoMes > 0 && (
@@ -2408,12 +2424,13 @@ export default function FinanceiroPage() {
                               </tr>
                               {isExpanded && Array.isArray(h.detalhes) && h.detalhes.length > 0 && (
                                 <tr key={`${h.id}-detail`} className="bg-zinc-950/60">
-                                  <td colSpan={6} className="px-6 py-3">
+                                  <td colSpan={7} className="px-6 py-3">
                                     <table className="w-full text-xs">
                                       <thead>
                                         <tr className="border-b border-zinc-800 text-left">
                                           <th className="text-zinc-600 font-medium py-1.5 pr-4">Descrição</th>
                                           <th className="text-zinc-600 font-medium py-1.5 pr-4">Categoria</th>
+                                          <th className="text-zinc-600 font-medium py-1.5 pr-4">Unidade</th>
                                           <th className="text-zinc-600 font-medium py-1.5 text-right">Valor</th>
                                         </tr>
                                       </thead>
@@ -2422,6 +2439,13 @@ export default function FinanceiroPage() {
                                           <tr key={i}>
                                             <td className="py-1.5 pr-4 text-zinc-400">{d.descricao}</td>
                                             <td className="py-1.5 pr-4 text-zinc-500 capitalize">{d.categoria}</td>
+                                            <td className="py-1.5 pr-4">
+                                              {d.empresa ? (
+                                                <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">{d.empresa}</span>
+                                              ) : (
+                                                <span className="text-zinc-600 text-xs">—</span>
+                                              )}
+                                            </td>
                                             <td className="py-1.5 text-zinc-300 font-semibold text-right whitespace-nowrap">{formatCurrency(d.valor)}</td>
                                           </tr>
                                         ))}

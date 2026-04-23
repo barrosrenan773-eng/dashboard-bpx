@@ -227,10 +227,23 @@ export default function GeralPage() {
     return { ...base, capital: capitalTotal, producao: producaoTotal }
   }, [contratosFinalizados, contratosPeriodo, despesasFiltradas])
 
+  // Comissão Francisco HSF = 5% do lucro líquido CCA2 (antes da comissão)
+  const comissaoFrancisco = useMemo(() => {
+    if (periodo !== 'mes') return 0
+    const receitaCCA2 = contratosFinalizados
+      .filter(c => (c as any).origem === 'CCA2')
+      .reduce((s, c) => s + (c.taxa ?? 0), 0)
+    const despesasCCA2 = despesasFiltradas
+      .filter(d => (d as any).empresa === 'CCA2')
+      .reduce((s, d) => s + Number(d.valor), 0)
+    const lucroBrutoCCA2 = receitaCCA2 - despesasCCA2
+    return Math.max(0, lucroBrutoCCA2) * 0.05
+  }, [contratosFinalizados, despesasFiltradas, periodo])
+
   // Adiciona folha + comissões + metaAds às despesas, receitas manuais à receita
   const kpis = useMemo(() => {
     if (periodo !== 'mes') return kpisBase
-    const extraDespesas = folhaPrevista + comissoesDoMes + metaAdsSpend
+    const extraDespesas = folhaPrevista + comissoesDoMes + metaAdsSpend + comissaoFrancisco
     const receita = kpisBase.receita + receitasManuais
     const lucro = receita - kpisBase.despesas - extraDespesas
     return {
@@ -240,7 +253,7 @@ export default function GeralPage() {
       lucro,
       margem: receita > 0 ? (lucro / receita) * 100 : 0,
     }
-  }, [kpisBase, periodo, folhaPrevista, comissoesDoMes, metaAdsSpend, receitasManuais])
+  }, [kpisBase, periodo, folhaPrevista, comissoesDoMes, metaAdsSpend, receitasManuais, comissaoFrancisco])
 
   // Pipeline: contratos aguardando liberação de margem
   const pipeline = useMemo(() => ({

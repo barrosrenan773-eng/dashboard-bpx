@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       origem: origem ?? null,
       capital: capital ?? 0,
       taxa: taxa ?? 0,
-      status: status ?? 'aguardando',
+      status: status ?? 'avaliado',
       data_finalizacao: data_finalizacao ?? null,
       observacoes: observacoes ?? null,
       telefone: telefone ?? null,

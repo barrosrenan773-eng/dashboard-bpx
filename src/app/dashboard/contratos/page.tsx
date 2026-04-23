@@ -17,7 +17,7 @@ type Contrato = {
   origem: string | null
   capital: number
   taxa: number
-  status: 'aguardando' | 'finalizado'
+  status: 'avaliado' | 'aguardando' | 'finalizado'
   data_finalizacao: string | null
   arquivo_url: string | null
   arquivo_nome: string | null
@@ -30,11 +30,13 @@ type Contrato = {
 }
 
 const STATUS_LABEL: Record<Contrato['status'], string> = {
+  avaliado:   'Avaliado',
   aguardando: 'Aguardando liberação de margem',
   finalizado: 'Finalizado',
 }
 
 const STATUS_STYLE: Record<Contrato['status'], string> = {
+  avaliado:   'text-blue-400 bg-blue-500/10 border-blue-500/30',
   aguardando: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
   finalizado: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
 }
@@ -52,7 +54,7 @@ const EMPTY_FORM = {
   origem: ORIGENS[0] as string,
   capital: '',
   taxa: '',
-  status: 'aguardando' as Contrato['status'],
+  status: 'avaliado' as Contrato['status'],
   data_finalizacao: '',
   observacoes: '',
   telefone: '',
@@ -292,7 +294,7 @@ export default function ContratosPage() {
   const dateEnd   = new Date(y, m, 0, 23, 59, 59)
   const contratosMes       = filtrarContratos(contratos, dateStart, dateEnd)
   const finalizadosMes     = filtrarContratos(contratos, dateStart, dateEnd, 'finalizado')
-  const aguardandoMes      = filtrarContratos(contratos, dateStart, dateEnd, 'aguardando')
+  const aguardandoMes      = contratosMes.filter(c => c.status === 'aguardando' || c.status === 'avaliado')
 
   // Filtros encadeados: serviço → pessoa (sobre contratosMes)
   const contratosPorServico = filtroServico === 'todos'
@@ -503,6 +505,7 @@ export default function ContratosPage() {
                     onChange={e => setForm(f => ({ ...f, status: e.target.value as Contrato['status'] }))}
                     className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
                   >
+                    <option value="avaliado">Avaliado</option>
                     <option value="aguardando">Aguardando liberação de margem</option>
                     <option value="finalizado">Finalizado</option>
                   </select>

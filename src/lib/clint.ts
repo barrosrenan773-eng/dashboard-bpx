@@ -1,6 +1,6 @@
 const BASE = 'https://api.clint.digital/v1'
 
-const EXCLUIR = ['marcelo', 'desconhecido', 'adriane', 'giulia', 'thiago', 'reten', 'ia damatta', 'diretoria', 'bpx soluções', 'bpx solucoes', 'francisco']
+const EXCLUIR = ['marcelo', 'desconhecido', 'adriane', 'giulia', 'thiago', 'reten', 'ia damatta', 'diretoria', 'bpx soluções', 'bpx solucoes', 'francisco', 'ingrid']
 
 export function normalizarNome(n: string) {
   return n.replace(/#\d*\s*/g, '').replace(/[#@!]/g, '')
