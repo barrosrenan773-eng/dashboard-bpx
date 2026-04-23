@@ -36,7 +36,6 @@ import {
   ArrowRight,
   BarChart2,
   Hash,
-  Percent,
   Users,
   Clock,
 } from 'lucide-react'
@@ -255,6 +254,14 @@ export default function GeralPage() {
     }
   }, [kpisBase, periodo, folhaPrevista, comissoesDoMes, metaAdsSpend, receitasManuais, comissaoFrancisco])
 
+  // Projeção: finalizados + em andamento (aguardando + avaliado)
+  const receitaProjecao = useMemo(() => {
+    const emAndamento = filtrarContratos(contratos, dateStart, dateEnd, 'todos')
+      .filter(c => c.status === 'aguardando' || c.status === 'avaliado')
+      .reduce((s, c) => s + (c.taxa ?? 0), 0)
+    return kpis.receita + emAndamento
+  }, [contratos, dateStart, dateEnd, kpis.receita])
+
   // Pipeline: contratos aguardando liberação de margem
   const pipeline = useMemo(() => ({
     qtd: contratosAguardando.length,
@@ -438,6 +445,15 @@ export default function GeralPage() {
             bgClass={kpis.lucro >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10'}
           />
           <KpiCard
+            label="Projeção de Receita"
+            value={formatCurrency(receitaProjecao)}
+            sub="finalizados + em andamento"
+            icon={TrendingUp}
+            color="#A855F7"
+            colorClass="text-purple-400"
+            bgClass="bg-purple-500/10"
+          />
+          <KpiCard
             label={KPI_LABELS.qtdContratos}
             value={String(kpis.qtdContratos)}
             sub="contratos finalizados no período"
@@ -454,15 +470,6 @@ export default function GeralPage() {
             color="#06B6D4"
             colorClass="text-cyan-400"
             bgClass="bg-cyan-500/10"
-          />
-          <KpiCard
-            label={KPI_LABELS.taxaMedia}
-            value={formatCurrency(kpis.taxaMedia)}
-            sub="receita / qtd contratos"
-            icon={Percent}
-            color="#F97316"
-            colorClass="text-orange-400"
-            bgClass="bg-orange-500/10"
           />
         </div>
 
